@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- generated on 2026-05-13 16:38:16.533724 by Eclipse SUMO randomTrips.py v1_26_0+0000-fa7df22d7f1
+<configuration>
+    <net-file value="grid.net.xml"/>
+    <route-file value="grid.rou.xml"/>
+    <seed value="7"/>
+    <end value="300.0"/>
+    <period value="2.0"/>
+</configuration>
+-->
+
+<!-- generated on 2026-05-13T16:38:16.456688+07:00 by Eclipse SUMO duarouter 1.26.0
+<duarouterConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/duarouterConfiguration.xsd">
+
+    <input>
+        <net-file value="grid.net.xml"/>
+        <route-files value="trips.trips.xml"/>
+    </input>
+
+    <output>
+        <output-file value="grid.rou.xml"/>
+        <alternatives-output value="NUL"/>
+    </output>
+
+    <time>
+        <begin value="0"/>
+        <end value="300.0"/>
+    </time>
+
+    <report>
+        <no-warnings value="true"/>
+        <ignore-errors value="true"/>
+        <no-step-log value="true"/>
+    </report>
+
+</duarouterConfiguration>
+-->
+
+<routes xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/routes_file.xsd">
+    <route id="routeWE" edges="A1B1 B1C1"/>
+    <route id="routeEW" edges="C1B1 B1A1"/>
+    <route id="routeSN" edges="B0B1 B1B2"/>
+    <route id="routeNS" edges="B2B1 B1B0"/>
+    <vType id="car"
+       vClass="passenger"
+       maxSpeed="11.11" accel="3.0" decel="5.0"
+       length="5" width="1.5" minGap="2.0" tau="1.5"
+       color="1,1,1"
+       lcStrategic="1.5"
+       lcCooperative="1" />
+
+    <vType id="bike"
+        vClass="motorcycle" guiShape="motorcycle"
+        maxSpeed="12.50" accel="3.5" decel="5.5"
+        length="1.8" width="0.5"
+        minGap="1.6" minGapLat="0.5" maxSpeedLat="1.4"
+        tau="1" sigma="0.8"
+        color="0,0.9,0.2"
+        lcStrategic="1.5"
+        lcCooperative="1" lcPushy="0.7" lcImpatience="0.7" />
+
+    <vType id="bicycle"
+        vClass="bicycle" guiShape="bicycle"
+        maxSpeed="12.50" accel="3.5" decel="5.5"
+        length="1.8" width="0.333"
+        minGap="1.6" minGapLat="0.5" maxSpeedLat="1.4"
+        tau="1" sigma="0.8"
+        color="0,0.2,1"
+        lcStrategic="1.5"
+        lcCooperative="1" lcPushy="0.7" lcImpatience="0.7" />
+
+    <vType id="bus"
+        vClass="bus"
+        maxSpeed="8.33" accel="1.4" decel="5.5" emergencyDecel="7.5"
+        length="6" width="1.5"
+        minGap="2.8" minGapLat="3" maxSpeedLat="0.8"
+        tau="1.5" speedFactor="0.9" speedDev="0.05"
+        color="1,0.5,0"
+        lcStrategic="1.5"
+        lcCooperative="1" />
+
+    <vType id="minibus"
+        vClass="bus" guiShape="bus"
+        maxSpeed="8.33" accel="1.4" decel="5.5" emergencyDecel="7.5"
+        length="5" width="1.5"
+        minGap="2.8" minGapLat="3" maxSpeedLat="0.8"
+        tau="1.5" speedFactor="0.9" speedDev="0.05"
+        color="1,0.4,0"
+        lcStrategic="1.5"
+        lcCooperative="1"/>
+</routes>

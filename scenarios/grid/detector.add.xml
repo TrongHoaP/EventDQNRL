@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- generated on 2026-05-13T17:12:12.537147+07:00 by Eclipse SUMO netedit 1.26.0
+-->
+
+<additional xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/additional_file.xsd">
+    <!-- Traffict light -->
+    
+    <!-- Detectors -->
+    <inductionLoop id="A1B1_1" lane="A1B1_1" pos="237.12" period="300.00" file="detector/inductionLoop.xml"/>
+    <inductionLoop id="A1B1_2" lane="A1B1_2" pos="237.29" period="300.00" file="detector/inductionLoop.xml"/>
+    <inductionLoop id="B2B1_0" lane="B2B1_0" pos="233.41" period="300.00" file="detector/inductionLoop.xml"/>
+    <inductionLoop id="A1B1_0" lane="A1B1_0" pos="237.21" period="300.00" file="detector/inductionLoop.xml"/>
+    <inductionLoop id="C1B1_0" lane="C1B1_0" pos="237.04" period="300.00" file="detector/inductionLoop.xml"/>
+    <inductionLoop id="C1B1_1" lane="C1B1_1" pos="236.95" period="300.00" file="detector/inductionLoop.xml"/>
+    <inductionLoop id="C1B1_2" lane="C1B1_2" pos="237.12" period="300.00" file="detector/inductionLoop.xml"/>
+    <inductionLoop id="B0B1_0" lane="B0B1_0" pos="234.19" period="300.00" file="detector/inductionLoop.xml"/>
+    <inductionLoop id="B0B1_1" lane="B0B1_1" pos="233.93" period="300.00" file="detector/inductionLoop.xml"/>
+    <inductionLoop id="B2B1_1" lane="B2B1_1" pos="233.41" period="300.00" file="detector/inductionLoop.xml"/>
+    <laneAreaDetector id="A1B1_2" lane="A1B1_2" pos="187.19" length="50.00" period="300.00" file="detector/laneAreaDetector.xml"/>
+    <laneAreaDetector id="A1B1_1" lane="A1B1_1" pos="187.19" length="50.00" period="300.00" file="detector/laneAreaDetector.xml"/>
+    <laneAreaDetector id="A1B1_0" lane="A1B1_0" pos="186.88" length="50.00" period="300.00" file="detector/laneAreaDetector.xml"/>
+    <laneAreaDetector id="C1B1_0" lane="C1B1_0" pos="186.41" length="50.00" period="300.00" file="detector/laneAreaDetector.xml"/>
+    <laneAreaDetector id="C1B1_1" lane="C1B1_1" pos="186.51" length="50.00" period="300.00" file="detector/laneAreaDetector.xml"/>
+    <laneAreaDetector id="C1B1_2" lane="C1B1_2" pos="186.82" length="50.00" period="300.00" file="detector/laneAreaDetector.xml"/>
+    <laneAreaDetector id="B0B1_1" lane="B0B1_1" pos="183.63" length="50.00" period="300.00" file="detector/laneAreaDetector.xml"/>
+    <laneAreaDetector id="B2B1_0" lane="B2B1_0" pos="182.82" length="50.00" period="300.00" file="detector/laneAreaDetector.xml"/>
+    <laneAreaDetector id="B0B1_0" lane="B0B1_0" pos="183.63" length="50.00" period="300.00" file="detector/laneAreaDetector.xml"/>
+    <laneAreaDetector id="B2B1_1" lane="B2B1_1" pos="182.69" length="50.00" period="300.00" file="detector/laneAreaDetector.xml"/>
+</additional>

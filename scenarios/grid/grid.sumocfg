@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <input>
+        <net-file value="grid.net.xml"/>
+        <route-files value="grid.rou.xml"/>
+        <additional-files value="detector.add.xml"/>
+    </input>
+    <time>
+        <begin value="0"/>
+        <end value="86000"/>
+    </time>
+    <processing>
+        <lateral-resolution value="0.8"/>
+        <collision.check-junctions value="true"/>
+    </processing>
+</configuration>

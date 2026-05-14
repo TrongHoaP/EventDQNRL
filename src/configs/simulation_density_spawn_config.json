@@ -1,0 +1,102 @@
+{
+    "simulation_config":{
+        "densitybyhour_by_road":{
+            "road_2_lane":{
+                "lane_1": {
+                    "bicycle": 477,
+                    "bike": 4341,
+                    "car": 279,
+                    "bus": 28,
+                    "minibus": 39
+                },
+                "lane_2": {
+                    "bicycle": 0,
+                    "bike": 2003,
+                    "car": 930,
+                    "bus": 56,
+                    "minibus": 80
+                }
+            },
+            "road_3_lane": {
+                "lane_1": {
+                    "bicycle": 528,
+                    "bike": 6518,
+                    "car": 0,
+                    "bus": 0,
+                    "minibus": 0
+                },
+                "lane_2": {
+                    "bicycle": 0,
+                    "bike": 2897,
+                    "car": 1059,
+                    "bus": 33,
+                    "minibus": 44
+                },
+                "lane_3": {
+                    "bicycle": 0,
+                    "bike": 0,
+                    "car": 1694,
+                    "bus": 65,
+                    "minibus": 88
+                }
+            }
+        },
+        "density_by_time":[
+            {
+                "start_time": 0,
+                "end_time": 18000,
+                "density": 0.15
+            },
+            {
+                "start_time": 18000,
+                "end_time": 23400,
+                "density": 0.3
+            },
+            {
+                "start_time": 23400,
+                "end_time": 25200,
+                "density": 0.6
+            },
+            {
+                "start_time": 25200,
+                "end_time": 32400,
+                "density": 0.85
+            },
+            {
+                "start_time": 32400,
+                "end_time": 37800,
+                "density": 0.3
+            },
+            {
+                "start_time": 37800,
+                "end_time": 50400,
+                "density": 0.6
+            },
+            {
+                "start_time": 50400,
+                "end_time": 57600,
+                "density": 0.3
+            },
+            {
+                "start_time": 57600,
+                "end_time": 68400,
+                "density": 0.85
+            },
+            {
+                "start_time": 68400,
+                "end_time": 75600,
+                "density": 0.6
+            },
+            {
+                "start_time": 75600,
+                "end_time": 79200,
+                "density": 0.3
+            },
+            {
+                "start_time": 79200,
+                "end_time": 86400,
+                "density": 0.15
+            }
+        ]
+    }
+}

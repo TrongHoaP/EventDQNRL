@@ -1,0 +1,144 @@
+{
+    "seed": 7,
+    "description": "Persistent accident spawn schedule. Delete this file to regenerate lane, position, and vehicle-type choices.",
+    "accident_events": [
+        {
+            "event_id": "accident_04h",
+            "time": 14400,
+            "duration": 1800,
+            "vehicles": [
+                {
+                    "vehicle_id": "accident_04h_1",
+                    "route_id": "routeSN",
+                    "edge_id": "B0B1",
+                    "lane_index": 0,
+                    "vehicle_type": "bike",
+                    "position": 207.91
+                },
+                {
+                    "vehicle_id": "accident_04h_2",
+                    "route_id": "routeSN",
+                    "edge_id": "B0B1",
+                    "lane_index": 1,
+                    "vehicle_type": "car",
+                    "position": 216.52
+                }
+            ]
+        },
+        {
+            "event_id": "accident_08h",
+            "time": 28800,
+            "duration": 1800,
+            "vehicles": [
+                {
+                    "vehicle_id": "accident_08h_1",
+                    "route_id": "routeEW",
+                    "edge_id": "C1B1",
+                    "lane_index": 0,
+                    "vehicle_type": "bike",
+                    "position": 235.87
+                },
+                {
+                    "vehicle_id": "accident_08h_2",
+                    "route_id": "routeEW",
+                    "edge_id": "C1B1",
+                    "lane_index": 1,
+                    "vehicle_type": "minibus",
+                    "position": 212.22
+                }
+            ]
+        },
+        {
+            "event_id": "accident_12h",
+            "time": 43200,
+            "duration": 1800,
+            "vehicles": [
+                {
+                    "vehicle_id": "accident_12h_1",
+                    "route_id": "routeWE",
+                    "edge_id": "A1B1",
+                    "lane_index": 0,
+                    "vehicle_type": "bicycle",
+                    "position": 236.11
+                },
+                {
+                    "vehicle_id": "accident_12h_2",
+                    "route_id": "routeWE",
+                    "edge_id": "A1B1",
+                    "lane_index": 1,
+                    "vehicle_type": "car",
+                    "position": 236.57
+                }
+            ]
+        },
+        {
+            "event_id": "accident_17h",
+            "time": 61200,
+            "duration": 1800,
+            "vehicles": [
+                {
+                    "vehicle_id": "accident_17h_1",
+                    "route_id": "routeEW",
+                    "edge_id": "C1B1",
+                    "lane_index": 0,
+                    "vehicle_type": "bike",
+                    "position": 226.29
+                },
+                {
+                    "vehicle_id": "accident_17h_2",
+                    "route_id": "routeEW",
+                    "edge_id": "C1B1",
+                    "lane_index": 1,
+                    "vehicle_type": "bicycle",
+                    "position": 211.12
+                }
+            ]
+        },
+        {
+            "event_id": "accident_20h",
+            "time": 72000,
+            "duration": 1800,
+            "vehicles": [
+                {
+                    "vehicle_id": "accident_20h_1",
+                    "route_id": "routeWE",
+                    "edge_id": "A1B1",
+                    "lane_index": 0,
+                    "vehicle_type": "bicycle",
+                    "position": 221.86
+                },
+                {
+                    "vehicle_id": "accident_20h_2",
+                    "route_id": "routeWE",
+                    "edge_id": "A1B1",
+                    "lane_index": 1,
+                    "vehicle_type": "minibus",
+                    "position": 237.16
+                }
+            ]
+        },
+        {
+            "event_id": "accident_23h",
+            "time": 82800,
+            "duration": 1800,
+            "vehicles": [
+                {
+                    "vehicle_id": "accident_23h_1",
+                    "route_id": "routeWE",
+                    "edge_id": "A1B1",
+                    "lane_index": 0,
+                    "vehicle_type": "bike",
+                    "position": 222.46
+                },
+                {
+                    "vehicle_id": "accident_23h_2",
+                    "route_id": "routeWE",
+                    "edge_id": "A1B1",
+                    "lane_index": 1,
+                    "vehicle_type": "minibus",
+                    "position": 230.2
+                }
+            ]
+        }
+    ]
+}
