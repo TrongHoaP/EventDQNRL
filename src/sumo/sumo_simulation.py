@@ -263,6 +263,8 @@ def run_simulation(
         str(end_time),
         "--no-step-log",
         "true",
+        "--no-warnings",
+        "true",
         "--time-to-teleport",
         "-1",
         "--xml-validation",
