@@ -20,6 +20,8 @@ class SumoConfig:
     end_time: int = 3600
     demand_scale: float = 0.2
     disable_accidents: bool = True
+    randomize_demand: bool = False
+    demand_time_jitter_seconds: int = 0
 
 
 @dataclass(frozen=True)
@@ -52,6 +54,11 @@ class RewardConfig:
     wait_weight: float = 0.01
     switch_weight: float = 0.1
     safety_weight: float = 0.05
+    tail_queue_weight: float = 0.0
+    queue_spike_threshold: float = 0.0
+    queue_spike_weight: float = 0.0
+    tail_queue_spike_threshold: float = 0.0
+    tail_queue_spike_weight: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -69,6 +76,19 @@ class TrainingConfig:
     hidden_size: int = 128
     device: str = "auto"
     run_name: str = "dqn"
+    eval_epsilon: float = 0.0
+    checkpoint_window: int = 1
+    validation_interval: int = 0
+    validation_episodes: int = 0
+    validation_wait_target: float = 4.46
+    validation_throughput_target: float = 1100.0
+    validation_wait_penalty_weight: float = 20.0
+    validation_throughput_penalty_weight: float = 0.2
+    validation_safety_penalty_weight: float = 20.0
+    validation_max_queue_target: float = 10.65
+    validation_tail_queue_target: float = 4.0
+    validation_max_queue_penalty_weight: float = 20.0
+    validation_tail_queue_penalty_weight: float = 10.0
 
 
 @dataclass(frozen=True)
@@ -128,4 +148,3 @@ def _build_dataclass(cls: type[Any], values: Any) -> Any:
     if unknown:
         raise ValueError(f"Unknown {cls.__name__} keys: {unknown}")
     return cls(**values)
-

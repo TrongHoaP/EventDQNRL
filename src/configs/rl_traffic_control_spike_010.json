@@ -28,27 +28,44 @@
     "mode": "approach_level"
   },
   "reward": {
-    "name": "queue_weighted_wait_time",
+    "name": "queue_wait_switch",
     "queue_weight": 1.0,
     "wait_weight": 0.01,
     "switch_weight": 0.1,
     "safety_weight": 0.05,
-    "tail_queue_weight": 0.0
+    "tail_queue_weight": 0.0,
+    "queue_spike_threshold": 10.0,
+    "queue_spike_weight": 0.10,
+    "tail_queue_spike_threshold": 4.0,
+    "tail_queue_spike_weight": 0.10
   },
   "training": {
-    "episodes": 30,
+    "episodes": 50,
     "batch_size": 64,
     "learning_rate": 0.001,
     "gamma": 0.99,
     "replay_size": 20000,
     "min_replay_size": 256,
     "epsilon_start": 1.0,
-    "epsilon_end": 0.05,
-    "epsilon_decay_steps": 30000,
+    "epsilon_end": 0.08,
+    "epsilon_decay_steps": 45000,
     "target_update_steps": 500,
     "hidden_size": 128,
     "device": "auto",
-    "run_name": "dqn_v01"
+    "run_name": "dqn_spike_010",
+    "eval_epsilon": 0.0,
+    "checkpoint_window": 5,
+    "validation_interval": 5,
+    "validation_episodes": 2,
+    "validation_wait_target": 4.46,
+    "validation_throughput_target": 1100.0,
+    "validation_wait_penalty_weight": 20.0,
+    "validation_throughput_penalty_weight": 0.2,
+    "validation_safety_penalty_weight": 20.0,
+    "validation_max_queue_target": 10.65,
+    "validation_tail_queue_target": 4.0,
+    "validation_max_queue_penalty_weight": 20.0,
+    "validation_tail_queue_penalty_weight": 10.0
   },
   "evaluation": {
     "controllers": [

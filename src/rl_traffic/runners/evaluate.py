@@ -14,6 +14,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate baselines and optional DQN checkpoint.")
     add_common_args(parser)
     parser.add_argument("--checkpoint", default=None, help="DQN checkpoint path.")
+    parser.add_argument(
+        "--episodes",
+        type=int,
+        default=None,
+        help="Override evaluation episodes per controller.",
+    )
     return parser.parse_args()
 
 
@@ -21,6 +27,7 @@ def main() -> int:
     args = parse_args()
     config = load_runner_config(args)
     name = args.run_name or "evaluation"
+    episodes = args.episodes or config.evaluation.episodes
     output = run_dir(name)
     summaries = []
     probe_env = SumoTrafficSignalEnv(config)
@@ -49,7 +56,7 @@ def main() -> int:
             )
         else:
             controller = build_controller(controller_name, factory_config)
-        for episode in range(config.evaluation.episodes):
+        for episode in range(episodes):
             env = SumoTrafficSignalEnv(config, controller_name=controller.name)
             metrics = run_episode(env, controller, episode=episode, seed=config.sumo.seed + episode)
             append_episode_metrics(output / "metrics" / "episode_metrics.csv", metrics)

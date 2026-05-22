@@ -28,7 +28,7 @@
     "mode": "approach_level"
   },
   "reward": {
-    "name": "queue_weighted_wait_time",
+    "name": "queue_wait_switch",
     "queue_weight": 1.0,
     "wait_weight": 0.01,
     "switch_weight": 0.1,
@@ -48,14 +48,10 @@
     "target_update_steps": 500,
     "hidden_size": 128,
     "device": "auto",
-    "run_name": "dqn_v01"
+    "run_name": "dqn_masked_approach"
   },
   "evaluation": {
     "controllers": [
-      "fixed_time",
-      "actuated",
-      "max_pressure",
-      "random",
       "dqn"
     ],
     "episodes": 30,

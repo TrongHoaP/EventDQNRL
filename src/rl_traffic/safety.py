@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+import numpy as np
+
 from src.rl_traffic.config import ControlConfig, SafetyConfig
 
 
@@ -51,6 +53,42 @@ class SafetyLayer:
                     return SafetyDecision(raw_action, index, index != raw_action, "max_green")
 
         return SafetyDecision(raw_action, raw_action, False, "ok")
+
+    def valid_action_mask(self, controller: Any) -> np.ndarray:
+        mask = np.zeros(controller.action_size, dtype=bool)
+        for action in range(controller.action_size):
+            mask[action] = self.is_action_valid(action, controller)
+        if not mask.any() and controller.action_size > 0:
+            mask[self._fallback(0, controller, "no_valid_action").action] = True
+        return mask
+
+    def is_action_valid(self, action: int, controller: Any) -> bool:
+        if not self.config.enabled:
+            return 0 <= action < controller.action_size
+        if action < 0 or action >= controller.action_size:
+            return False
+
+        traffic_light_id, target_green = controller.action_map[action]
+        spec = controller.specs[traffic_light_id]
+        if self.config.enforce_green_phase_only and target_green not in spec.green_phases:
+            return False
+
+        now = float(controller.traci.simulation.getTime())
+        current_phase = controller.traci.trafficlight.getPhase(traffic_light_id)
+        elapsed = now - controller.last_switch_time.get(traffic_light_id, now)
+        if (
+            self.config.enforce_min_green
+            and current_phase != target_green
+            and elapsed < self.control.min_green_seconds
+        ):
+            return False
+        if (
+            self.config.enforce_max_green
+            and current_phase == target_green
+            and elapsed >= self.control.max_green_seconds
+        ):
+            return False
+        return True
 
     def _fallback(self, raw_action: int, controller: Any, reason: str) -> SafetyDecision:
         if self.config.invalid_action_policy == "first":

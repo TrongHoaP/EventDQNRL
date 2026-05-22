@@ -25,10 +25,10 @@
     "override_penalty": 0.05
   },
   "state": {
-    "mode": "approach_level"
+    "mode": "lane_level"
   },
   "reward": {
-    "name": "queue_weighted_wait_time",
+    "name": "queue_wait_switch",
     "queue_weight": 1.0,
     "wait_weight": 0.01,
     "switch_weight": 0.1,
@@ -48,7 +48,7 @@
     "target_update_steps": 500,
     "hidden_size": 128,
     "device": "auto",
-    "run_name": "dqn_v01"
+    "run_name": "dqn_lane_level"
   },
   "evaluation": {
     "controllers": [

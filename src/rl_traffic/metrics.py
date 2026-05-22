@@ -23,6 +23,17 @@ class EpisodeMetrics:
     num_switches: int = 0
     num_safety_overrides: int = 0
     episode_seconds: float = 0.0
+    tail_queue: float = 0.0
+    queue_penalty: float = 0.0
+    wait_penalty: float = 0.0
+    switch_penalty: float = 0.0
+    safety_penalty: float = 0.0
+    tail_queue_penalty: float = 0.0
+    queue_spike_penalty: float = 0.0
+    tail_queue_spike_penalty: float = 0.0
+    queue_p90: float = 0.0
+    queue_p95: float = 0.0
+    tail_queue_p90: float = 0.0
 
 
 class EpisodeMetricAccumulator:
@@ -32,6 +43,8 @@ class EpisodeMetricAccumulator:
         self._wait_sum = 0.0
         self._speed_sum = 0.0
         self._speed_count = 0
+        self._queue_values: list[float] = []
+        self._tail_queue_values: list[float] = []
 
     def update(self, reward: float, info: dict[str, Any]) -> None:
         queue = float(info.get("total_queue", 0.0))
@@ -45,16 +58,29 @@ class EpisodeMetricAccumulator:
         self.metrics.num_safety_overrides += int(bool(info.get("safety_overridden", False)))
         self.metrics.throughput = float(info.get("arrived_vehicles", self.metrics.throughput))
         self.metrics.episode_seconds = float(info.get("simulation_time", self.metrics.episode_seconds))
+        self.metrics.tail_queue = max(self.metrics.tail_queue, float(info.get("tail_queue", 0.0)))
+        self.metrics.queue_penalty += float(info.get("queue_penalty", 0.0))
+        self.metrics.wait_penalty += float(info.get("wait_penalty", 0.0))
+        self.metrics.switch_penalty += float(info.get("switch_penalty", 0.0))
+        self.metrics.safety_penalty += float(info.get("safety_penalty", 0.0))
+        self.metrics.tail_queue_penalty += float(info.get("tail_queue_penalty", 0.0))
+        self.metrics.queue_spike_penalty += float(info.get("queue_spike_penalty", 0.0))
+        self.metrics.tail_queue_spike_penalty += float(info.get("tail_queue_spike_penalty", 0.0))
         self._queue_sum += queue
         self._wait_sum += wait
         self._speed_sum += speed
         self._speed_count += 1
+        self._queue_values.append(queue)
+        self._tail_queue_values.append(float(info.get("tail_queue", 0.0)))
 
     def finish(self) -> EpisodeMetrics:
         steps = max(self.metrics.steps, 1)
         self.metrics.mean_queue = self._queue_sum / steps
         self.metrics.mean_waiting_time = self._wait_sum / steps
         self.metrics.mean_speed = self._speed_sum / max(self._speed_count, 1)
+        self.metrics.queue_p90 = _percentile(self._queue_values, 0.90)
+        self.metrics.queue_p95 = _percentile(self._queue_values, 0.95)
+        self.metrics.tail_queue_p90 = _percentile(self._tail_queue_values, 0.90)
         return self.metrics
 
 
@@ -78,3 +104,10 @@ def write_summary(path: str | Path, metrics: list[EpisodeMetrics]) -> None:
         json.dump(payload, file, indent=2)
         file.write("\n")
 
+
+def _percentile(values: list[float], quantile: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    index = int(round((len(ordered) - 1) * quantile))
+    return float(ordered[max(0, min(len(ordered) - 1, index))])

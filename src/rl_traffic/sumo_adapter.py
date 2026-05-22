@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import random
 from collections import defaultdict
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -22,12 +24,14 @@ except ImportError:  # pragma: no cover - reported at runtime.
 
 class DemandSpawner:
     def __init__(self, events: list[Any]) -> None:
+        self.events = sorted(events, key=lambda event: int(event.time))
+        self.next_event_index = 0
         self.events_by_time: dict[int, list[Any]] = defaultdict(list)
-        for event in events:
+        for event in self.events:
             self.events_by_time[int(event.time)].append(event)
 
     @classmethod
-    def from_config(cls, config: SumoConfig) -> "DemandSpawner":
+    def from_config(cls, config: SumoConfig, seed: int | None = None) -> "DemandSpawner":
         simulation_config = load_simulation_config(config.spawn_config)
         route_file, net_file = get_sumo_input_files(config.sumocfg)
         route_lane_counts = get_route_lane_counts(route_file, net_file)
@@ -36,23 +40,47 @@ class DemandSpawner:
             route_lane_counts,
             demand_scale=config.demand_scale,
         )
+        if config.randomize_demand:
+            events = _jitter_spawn_times(
+                events,
+                seed=config.seed if seed is None else seed,
+                jitter_seconds=config.demand_time_jitter_seconds,
+                end_time=config.end_time,
+            )
         return cls(events)
+
+    def reset(self) -> None:
+        self.next_event_index = 0
 
     def spawn_for_time(self, traci_module: Any, current_time: int) -> int:
         spawned = 0
         for event in self.events_by_time.get(current_time, ()):
-            try:
-                traci_module.vehicle.add(
-                    vehID=event.vehicle_id,
-                    routeID=event.route_id,
-                    typeID=event.vehicle_type,
-                    depart=str(current_time),
-                    departLane=str(event.lane_index),
-                )
-                spawned += 1
-            except traci_module.TraCIException:
-                continue
+            spawned += self._spawn_event(traci_module, event, current_time)
         return spawned
+
+    def spawn_due_until(self, traci_module: Any, current_time: int) -> int:
+        spawned = 0
+        while self.next_event_index < len(self.events):
+            event = self.events[self.next_event_index]
+            if int(event.time) > current_time:
+                break
+            spawned += self._spawn_event(traci_module, event, current_time)
+            self.next_event_index += 1
+        return spawned
+
+    @staticmethod
+    def _spawn_event(traci_module: Any, event: Any, current_time: int) -> int:
+        try:
+            traci_module.vehicle.add(
+                vehID=event.vehicle_id,
+                routeID=event.route_id,
+                typeID=event.vehicle_type,
+                depart=str(current_time),
+                departLane=str(event.lane_index),
+            )
+            return 1
+        except traci_module.TraCIException:
+            return 0
 
 
 class SumoSession:
@@ -61,18 +89,19 @@ class SumoSession:
         self.traci = traci
         self._started = False
 
-    def start(self) -> Any:
+    def start(self, seed: int | None = None) -> Any:
         if sumolib is None or traci is None:
             raise RuntimeError("sumolib and traci are required to run SUMO.")
         if self._started:
             self.close()
+        sumo_seed = self.config.seed if seed is None else seed
         sumo_binary = sumolib.checkBinary("sumo-gui" if self.config.gui else "sumo")
         command = [
             sumo_binary,
             "-c",
             str(repo_path(self.config.sumocfg)),
             "--seed",
-            str(self.config.seed),
+            str(sumo_seed),
             "--step-length",
             str(self.config.step_length),
             "--end",
@@ -101,3 +130,22 @@ class SumoSession:
 
 def output_dir(run_name: str) -> Path:
     return repo_path(Path("runs") / run_name)
+
+
+def _jitter_spawn_times(
+    events: list[Any],
+    seed: int,
+    jitter_seconds: int,
+    end_time: int,
+) -> list[Any]:
+    jitter = max(0, int(jitter_seconds))
+    if jitter == 0:
+        return list(events)
+    rng = random.Random(seed)
+    latest_depart = max(0, int(end_time) - 1)
+    randomized = []
+    for event in events:
+        depart_time = int(event.time) + rng.randint(-jitter, jitter)
+        randomized.append(replace(event, time=max(0, min(latest_depart, depart_time))))
+    randomized.sort(key=lambda event: (int(event.time), event.vehicle_id))
+    return randomized

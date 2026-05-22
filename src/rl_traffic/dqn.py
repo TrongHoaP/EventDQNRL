@@ -81,13 +81,18 @@ class DQNAgent:
         self.losses: list[float] = []
 
     def act(self, observation: np.ndarray, info: dict[str, Any]) -> int:
-        epsilon = self.epsilon
+        epsilon = self.epsilon if self.trainable else self.config.eval_epsilon
         self.steps += 1
+        valid_actions = self._valid_actions(info)
         if random.random() < epsilon:
-            return random.randrange(self.action_dim)
+            return int(random.choice(valid_actions))
         with torch.no_grad():
             state = torch.as_tensor(observation, dtype=torch.float32, device=self.device).unsqueeze(0)
-            return int(torch.argmax(self.policy(state), dim=1).item())
+            q_values = self.policy(state).squeeze(0)
+            mask = torch.zeros(self.action_dim, dtype=torch.bool, device=self.device)
+            mask[torch.as_tensor(valid_actions, dtype=torch.long, device=self.device)] = True
+            q_values = q_values.masked_fill(~mask, -1e9)
+            return int(torch.argmax(q_values).item())
 
     def observe(self, transition: dict[str, Any]) -> None:
         if not self.trainable:
@@ -148,6 +153,19 @@ class DQNAgent:
             output,
         )
 
+    def clone_for_eval(self) -> "DQNAgent":
+        python_rng_state = random.getstate()
+        numpy_rng_state = np.random.get_state()
+        torch_rng_state = torch.random.get_rng_state()
+        agent = DQNAgent(self.state_dim, self.action_dim, self.config, trainable=False)
+        random.setstate(python_rng_state)
+        np.random.set_state(numpy_rng_state)
+        torch.random.set_rng_state(torch_rng_state)
+        agent.policy.load_state_dict(self.policy.state_dict())
+        agent.target.load_state_dict(self.target.state_dict())
+        agent.steps = self.steps
+        return agent
+
     @classmethod
     def load(
         cls,
@@ -176,3 +194,13 @@ class DQNAgent:
         if device == "auto":
             return torch.device("cuda" if torch.cuda.is_available() else "cpu")
         return torch.device(device)
+
+    def _valid_actions(self, info: dict[str, Any]) -> list[int]:
+        mask = info.get("valid_action_mask")
+        if mask is None:
+            return list(range(self.action_dim))
+        mask_array = np.asarray(mask, dtype=bool)
+        valid_actions = np.flatnonzero(mask_array).tolist()
+        if not valid_actions:
+            return list(range(self.action_dim))
+        return [int(action) for action in valid_actions]

@@ -33,10 +33,28 @@ Train DQN:
 .\.venv\Scripts\python.exe -m src.rl_traffic.runners.train_dqn --episodes 5 --run-name dqn
 ```
 
+Train DQN with stability-first checkpointing:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.rl_traffic.runners.train_dqn --config src\configs\rl_traffic_control_stability.json --run-name dqn_stability
+```
+
+Train DQN with spike-aware reward and validation:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.rl_traffic.runners.train_dqn --config src\configs\rl_traffic_control_spike_005.json --run-name dqn_spike_005_50ep
+```
+
 Evaluate baselines plus a trained DQN checkpoint:
 
 ```powershell
 .\.venv\Scripts\python.exe -m src.rl_traffic.runners.evaluate --checkpoint runs\dqn\checkpoints\best.pt --run-name evaluation
+```
+
+Evaluate DQN with seed-varying demand for robustness:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.rl_traffic.runners.evaluate --config src\configs\rl_traffic_control_masked_approach_dqn_eval_robust.json --checkpoint runs\dqn_stability_50ep\checkpoints\best_validation.pt --run-name eval_robust
 ```
 
 Important config knobs:
@@ -46,6 +64,12 @@ Important config knobs:
 - `safety.enabled`: hard safety gate between controller actions and SUMO phase changes.
 - `state.mode`: `lane_level` or `approach_level`.
 - `reward`: all reward weights are editable without changing the environment.
+- `reward.queue_spike_*` and `reward.tail_queue_spike_*`: thresholded penalties for reducing queue spikes.
+- `sumo.randomize_demand` and `sumo.demand_time_jitter_seconds`: vary spawn times by episode seed for robustness evaluation.
+- `training.checkpoint_window`: moving-average window for `best_stable.pt`.
+- `training.validation_interval` and `training.validation_episodes`: optional validation checkpointing.
 
 Outputs are written under `runs/<run-name>/metrics/` and
-`runs/<run-name>/checkpoints/`.
+`runs/<run-name>/checkpoints/`. Training writes `best_train.pt` for single-episode
+reward, `best_stable.pt` for moving-average reward, and `best_validation.pt`
+when validation checkpointing is enabled.

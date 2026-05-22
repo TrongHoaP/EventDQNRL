@@ -8,7 +8,9 @@
     "step_length": 2.0,
     "end_time": 20000,
     "demand_scale": 0.2,
-    "disable_accidents": true
+    "disable_accidents": true,
+    "randomize_demand": true,
+    "demand_time_jitter_seconds": 300
   },
   "control": {
     "decision_interval_seconds": 10,
@@ -28,7 +30,7 @@
     "mode": "approach_level"
   },
   "reward": {
-    "name": "queue_weighted_wait_time",
+    "name": "queue_wait_switch",
     "queue_weight": 1.0,
     "wait_weight": 0.01,
     "switch_weight": 0.1,
@@ -48,14 +50,11 @@
     "target_update_steps": 500,
     "hidden_size": 128,
     "device": "auto",
-    "run_name": "dqn_v01"
+    "run_name": "dqn_masked_approach",
+    "eval_epsilon": 0.0
   },
   "evaluation": {
     "controllers": [
-      "fixed_time",
-      "actuated",
-      "max_pressure",
-      "random",
       "dqn"
     ],
     "episodes": 30,

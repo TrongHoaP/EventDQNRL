@@ -538,7 +538,10 @@ class TrafficLightController:
         return metric.queue
 
     def _advance_steps(self, seconds: int) -> None:
-        for _ in range(max(seconds, 0)):
+        if seconds <= 0:
+            return
+        target_time = self._sim_time() + float(seconds)
+        while self._sim_time() < target_time:
             self.traci.simulationStep()
 
     def _sim_time(self) -> float:
