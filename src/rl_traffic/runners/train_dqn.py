@@ -31,11 +31,22 @@ def validation_score(metrics: list[EpisodeMetrics], config) -> float:
     max_queue = mean(item.max_queue for item in metrics)
     tail_queue = mean(item.tail_queue for item in metrics)
     safety_overrides = sum(item.num_safety_overrides for item in metrics)
+    wait_target = config.validation_mean_wait_target or config.validation_wait_target
+    throughput_target = (
+        config.validation_min_throughput_target or config.validation_throughput_target
+    )
+    wait_penalty_weight = (
+        config.validation_mean_wait_penalty_weight
+        or config.validation_wait_penalty_weight
+    )
+    throughput_penalty_weight = (
+        config.validation_min_throughput_penalty_weight
+        or config.validation_throughput_penalty_weight
+    )
     return (
         reward
-        - config.validation_wait_penalty_weight * max(0.0, wait - config.validation_wait_target)
-        - config.validation_throughput_penalty_weight
-        * max(0.0, config.validation_throughput_target - throughput)
+        - wait_penalty_weight * max(0.0, wait - wait_target)
+        - throughput_penalty_weight * max(0.0, throughput_target - throughput)
         - config.validation_safety_penalty_weight * safety_overrides
         - config.validation_max_queue_penalty_weight
         * max(0.0, max_queue - config.validation_max_queue_target)

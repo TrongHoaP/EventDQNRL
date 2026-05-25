@@ -84,6 +84,10 @@ class TrainingConfig:
     validation_throughput_target: float = 1100.0
     validation_wait_penalty_weight: float = 20.0
     validation_throughput_penalty_weight: float = 0.2
+    validation_mean_wait_target: float = 0.0
+    validation_min_throughput_target: float = 0.0
+    validation_mean_wait_penalty_weight: float = 0.0
+    validation_min_throughput_penalty_weight: float = 0.0
     validation_safety_penalty_weight: float = 20.0
     validation_max_queue_target: float = 10.65
     validation_tail_queue_target: float = 4.0

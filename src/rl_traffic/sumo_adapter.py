@@ -8,9 +8,11 @@ from typing import Any
 
 from src.rl_traffic.config import SumoConfig, repo_path
 from src.sumo.sumo_simulation import (
+    AccidentEvent,
     build_spawn_schedule,
     get_route_lane_counts,
     get_sumo_input_files,
+    load_or_create_accident_schedule,
     load_simulation_config,
 )
 
@@ -81,6 +83,119 @@ class DemandSpawner:
             return 1
         except traci_module.TraCIException:
             return 0
+
+
+class AccidentManager:
+    def __init__(self, events: list[AccidentEvent]) -> None:
+        self.events = sorted(events, key=lambda event: int(event.time))
+        self.next_event_index = 0
+        self.active_accidents: dict[str, AccidentEvent] = {}
+
+    @classmethod
+    def from_config(cls, config: SumoConfig) -> "AccidentManager":
+        if config.disable_accidents:
+            return cls([])
+        route_file, net_file = get_sumo_input_files(config.sumocfg)
+        events = load_or_create_accident_schedule(
+            config.accident_config,
+            route_file,
+            net_file,
+        )
+        return cls(events)
+
+    def reset(self) -> None:
+        self.next_event_index = 0
+        self.active_accidents.clear()
+
+    def advance(self, traci_module: Any, current_time: int) -> int:
+        spawned_vehicles = 0
+        self._despawn_due(traci_module, current_time)
+        while self.next_event_index < len(self.events):
+            event = self.events[self.next_event_index]
+            if int(event.time) > current_time:
+                break
+            spawned_vehicles += self._spawn_event(traci_module, event, current_time)
+            self.active_accidents[event.event_id] = event
+            self.next_event_index += 1
+        self.pin_active(traci_module)
+        return spawned_vehicles
+
+    def pin_active(self, traci_module: Any) -> None:
+        for event in self.active_accidents.values():
+            for vehicle in event.vehicles:
+                try:
+                    lane_id = f"{vehicle.edge_id}_{vehicle.lane_index}"
+                    if vehicle.vehicle_id not in traci_module.vehicle.getIDList():
+                        continue
+                    if traci_module.vehicle.getLaneID(vehicle.vehicle_id) != lane_id:
+                        traci_module.vehicle.moveTo(
+                            vehicle.vehicle_id,
+                            lane_id,
+                            vehicle.position,
+                        )
+                    elif (
+                        abs(
+                            traci_module.vehicle.getLanePosition(vehicle.vehicle_id)
+                            - vehicle.position
+                        )
+                        > 0.5
+                    ):
+                        traci_module.vehicle.moveTo(
+                            vehicle.vehicle_id,
+                            lane_id,
+                            vehicle.position,
+                        )
+                    traci_module.vehicle.setSpeed(vehicle.vehicle_id, 0.0)
+                except traci_module.TraCIException:
+                    continue
+
+    @property
+    def active_accident_count(self) -> int:
+        return len(self.active_accidents)
+
+    @property
+    def active_vehicle_count(self) -> int:
+        return sum(len(event.vehicles) for event in self.active_accidents.values())
+
+    def _despawn_due(self, traci_module: Any, current_time: int) -> None:
+        expired = [
+            event_id
+            for event_id, event in self.active_accidents.items()
+            if event.despawn_time <= current_time
+        ]
+        for event_id in expired:
+            event = self.active_accidents.pop(event_id)
+            for vehicle in event.vehicles:
+                try:
+                    traci_module.vehicle.remove(vehicle.vehicle_id)
+                except traci_module.TraCIException:
+                    continue
+
+    @staticmethod
+    def _spawn_event(
+        traci_module: Any,
+        event: AccidentEvent,
+        current_time: int,
+    ) -> int:
+        spawned = 0
+        for vehicle in event.vehicles:
+            try:
+                traci_module.vehicle.add(
+                    vehID=vehicle.vehicle_id,
+                    routeID=vehicle.route_id,
+                    typeID=vehicle.vehicle_type,
+                    depart=str(current_time),
+                    departLane=str(vehicle.lane_index),
+                    departPos=str(vehicle.position),
+                    departSpeed="0",
+                )
+                traci_module.vehicle.setLaneChangeMode(vehicle.vehicle_id, 0)
+                traci_module.vehicle.setSpeed(vehicle.vehicle_id, 0.0)
+                traci_module.vehicle.setColor(vehicle.vehicle_id, (255, 0, 0, 255))
+                spawned += 1
+            except traci_module.TraCIException:
+                continue
+        return spawned
 
 
 class SumoSession:

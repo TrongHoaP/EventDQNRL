@@ -24,6 +24,9 @@ class EpisodeMetrics:
     num_safety_overrides: int = 0
     episode_seconds: float = 0.0
     tail_queue: float = 0.0
+    active_accidents: int = 0
+    active_accident_vehicles: int = 0
+    spawned_accident_vehicles: int = 0
     queue_penalty: float = 0.0
     wait_penalty: float = 0.0
     switch_penalty: float = 0.0
@@ -59,6 +62,17 @@ class EpisodeMetricAccumulator:
         self.metrics.throughput = float(info.get("arrived_vehicles", self.metrics.throughput))
         self.metrics.episode_seconds = float(info.get("simulation_time", self.metrics.episode_seconds))
         self.metrics.tail_queue = max(self.metrics.tail_queue, float(info.get("tail_queue", 0.0)))
+        self.metrics.active_accidents = max(
+            self.metrics.active_accidents,
+            int(info.get("active_accidents", 0)),
+        )
+        self.metrics.active_accident_vehicles = max(
+            self.metrics.active_accident_vehicles,
+            int(info.get("active_accident_vehicles", 0)),
+        )
+        self.metrics.spawned_accident_vehicles += int(
+            info.get("spawned_accident_vehicles", 0)
+        )
         self.metrics.queue_penalty += float(info.get("queue_penalty", 0.0))
         self.metrics.wait_penalty += float(info.get("wait_penalty", 0.0))
         self.metrics.switch_penalty += float(info.get("switch_penalty", 0.0))

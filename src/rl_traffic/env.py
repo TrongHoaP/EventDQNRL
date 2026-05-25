@@ -10,7 +10,7 @@ from gymnasium import spaces
 from src.rl_traffic.config import TrafficRLConfig
 from src.rl_traffic.rewards import RewardInputs, RewardResult, build_reward
 from src.rl_traffic.safety import SafetyLayer
-from src.rl_traffic.sumo_adapter import DemandSpawner, SumoSession
+from src.rl_traffic.sumo_adapter import AccidentManager, DemandSpawner, SumoSession
 from src.sumo.traffic_light_control import TrafficLightController
 
 
@@ -23,6 +23,7 @@ class SumoTrafficSignalEnv(gym.Env):
         self.controller_name = controller_name
         self.session = SumoSession(config.sumo)
         self.spawner = DemandSpawner.from_config(config.sumo)
+        self.accidents = AccidentManager.from_config(config.sumo)
         self.reward_fn = build_reward(config.reward)
         self.safety = SafetyLayer(config.safety, config.control)
         self.traci: Any | None = None
@@ -40,6 +41,7 @@ class SumoTrafficSignalEnv(gym.Env):
         super().reset(seed=seed)
         self.close()
         self.spawner = DemandSpawner.from_config(self.config.sumo, seed=seed)
+        self.accidents = AccidentManager.from_config(self.config.sumo)
         self.traci = self.session.start(seed=seed)
         self.controller = TrafficLightController(
             traci_module=self.traci,
@@ -56,7 +58,12 @@ class SumoTrafficSignalEnv(gym.Env):
         )
         self.action_space = spaces.Discrete(self.controller.action_size)
         self._arrived_total = 0
-        return observation, self._info(switched=False, safety_decision=None, spawned=0)
+        return observation, self._info(
+            switched=False,
+            safety_decision=None,
+            spawned=0,
+            spawned_accidents=0,
+        )
 
     def step(self, action: int) -> tuple[np.ndarray, float, bool, bool, dict[str, Any]]:
         if self.traci is None or self.controller is None:
@@ -64,7 +71,7 @@ class SumoTrafficSignalEnv(gym.Env):
 
         safety_decision = self.safety.resolve(int(action), self.controller)
         switched = self.controller.apply_action(safety_decision.action)
-        spawned = self._advance_control_interval()
+        spawned, spawned_accidents = self._advance_control_interval()
         total_queue, total_wait = self.controller._network_totals()
         tail_queue = self._tail_queue()
         reward_result = self.reward_fn(
@@ -82,6 +89,7 @@ class SumoTrafficSignalEnv(gym.Env):
             switched=switched,
             safety_decision=safety_decision,
             spawned=spawned,
+            spawned_accidents=spawned_accidents,
             reward_result=reward_result,
             tail_queue=tail_queue,
         )
@@ -98,16 +106,19 @@ class SumoTrafficSignalEnv(gym.Env):
             raise RuntimeError("Environment must be reset before action_count is known.")
         return self.controller.action_size
 
-    def _advance_control_interval(self) -> int:
+    def _advance_control_interval(self) -> tuple[int, int]:
         assert self.traci is not None
         spawned = 0
+        spawned_accidents = 0
         step_length = max(float(self.config.sumo.step_length), 1e-6)
         step_count = max(1, int(math.ceil(self.config.control.decision_interval_seconds / step_length)))
         for _ in range(step_count):
             current_time = int(round(self.traci.simulation.getTime()))
             spawned += self.spawner.spawn_due_until(self.traci, current_time)
+            spawned_accidents += self.accidents.advance(self.traci, current_time)
             self.traci.simulationStep()
-        return spawned
+            self.accidents.pin_active(self.traci)
+        return spawned, spawned_accidents
 
     def _observation(self) -> np.ndarray:
         assert self.controller is not None
@@ -132,6 +143,7 @@ class SumoTrafficSignalEnv(gym.Env):
         switched: bool,
         safety_decision: Any | None,
         spawned: int,
+        spawned_accidents: int,
         reward_result: RewardResult | None = None,
         tail_queue: float | None = None,
     ) -> dict[str, Any]:
@@ -176,6 +188,9 @@ class SumoTrafficSignalEnv(gym.Env):
             "vehicle_count": float(sum(vehicle_counts)),
             "arrived_vehicles": self._arrived_total,
             "spawned_vehicles": spawned,
+            "active_accidents": self.accidents.active_accident_count,
+            "active_accident_vehicles": self.accidents.active_vehicle_count,
+            "spawned_accident_vehicles": spawned_accidents,
             "switched": switched,
             "raw_action": None if safety_decision is None else safety_decision.raw_action,
             "safe_action": None if safety_decision is None else safety_decision.action,
