@@ -10,6 +10,7 @@ from src.rl_traffic.config import RewardConfig
 class RewardInputs:
     total_queue: float
     total_wait: float
+    arrived_delta: float
     tail_queue: float
     switched: bool
     safety_overridden: bool
@@ -20,6 +21,7 @@ class RewardResult:
     total: float
     queue_penalty: float
     wait_penalty: float
+    throughput_reward: float
     switch_penalty: float
     safety_penalty: float
     tail_queue_penalty: float
@@ -39,6 +41,7 @@ class QueueWaitSwitchReward:
     def __call__(self, inputs: RewardInputs) -> RewardResult:
         queue_penalty = -(self.config.queue_weight * inputs.total_queue)
         wait_penalty = -(self.config.wait_weight * inputs.total_wait)
+        throughput_reward = self.config.throughput_weight * inputs.arrived_delta
         switch_penalty = -self.config.switch_weight if inputs.switched else 0.0
         safety_penalty = -self.config.safety_weight if inputs.safety_overridden else 0.0
         tail_queue_penalty = -(self.config.tail_queue_weight * inputs.tail_queue)
@@ -49,6 +52,7 @@ class QueueWaitSwitchReward:
         total = (
             queue_penalty
             + wait_penalty
+            + throughput_reward
             + switch_penalty
             + safety_penalty
             + tail_queue_penalty
@@ -59,6 +63,7 @@ class QueueWaitSwitchReward:
             total=float(total),
             queue_penalty=float(queue_penalty),
             wait_penalty=float(wait_penalty),
+            throughput_reward=float(throughput_reward),
             switch_penalty=float(switch_penalty),
             safety_penalty=float(safety_penalty),
             tail_queue_penalty=float(tail_queue_penalty),

@@ -63,6 +63,7 @@ class SumoTrafficSignalEnv(gym.Env):
             safety_decision=None,
             spawned=0,
             spawned_accidents=0,
+            arrived_delta=0,
         )
 
     def step(self, action: int) -> tuple[np.ndarray, float, bool, bool, dict[str, Any]]:
@@ -71,13 +72,14 @@ class SumoTrafficSignalEnv(gym.Env):
 
         safety_decision = self.safety.resolve(int(action), self.controller)
         switched = self.controller.apply_action(safety_decision.action)
-        spawned, spawned_accidents = self._advance_control_interval()
+        spawned, spawned_accidents, arrived_delta = self._advance_control_interval()
         total_queue, total_wait = self.controller._network_totals()
         tail_queue = self._tail_queue()
         reward_result = self.reward_fn(
             RewardInputs(
                 total_queue=total_queue,
                 total_wait=total_wait,
+                arrived_delta=float(arrived_delta),
                 tail_queue=tail_queue,
                 switched=switched,
                 safety_overridden=safety_decision.overridden,
@@ -90,6 +92,7 @@ class SumoTrafficSignalEnv(gym.Env):
             safety_decision=safety_decision,
             spawned=spawned,
             spawned_accidents=spawned_accidents,
+            arrived_delta=arrived_delta,
             reward_result=reward_result,
             tail_queue=tail_queue,
         )
@@ -106,10 +109,11 @@ class SumoTrafficSignalEnv(gym.Env):
             raise RuntimeError("Environment must be reset before action_count is known.")
         return self.controller.action_size
 
-    def _advance_control_interval(self) -> tuple[int, int]:
+    def _advance_control_interval(self) -> tuple[int, int, int]:
         assert self.traci is not None
         spawned = 0
         spawned_accidents = 0
+        arrived_delta = 0
         step_length = max(float(self.config.sumo.step_length), 1e-6)
         step_count = max(1, int(math.ceil(self.config.control.decision_interval_seconds / step_length)))
         for _ in range(step_count):
@@ -117,8 +121,9 @@ class SumoTrafficSignalEnv(gym.Env):
             spawned += self.spawner.spawn_due_until(self.traci, current_time)
             spawned_accidents += self.accidents.advance(self.traci, current_time)
             self.traci.simulationStep()
+            arrived_delta += int(self.traci.simulation.getArrivedNumber())
             self.accidents.pin_active(self.traci)
-        return spawned, spawned_accidents
+        return spawned, spawned_accidents, arrived_delta
 
     def _observation(self) -> np.ndarray:
         assert self.controller is not None
@@ -144,6 +149,7 @@ class SumoTrafficSignalEnv(gym.Env):
         safety_decision: Any | None,
         spawned: int,
         spawned_accidents: int,
+        arrived_delta: int,
         reward_result: RewardResult | None = None,
         tail_queue: float | None = None,
     ) -> dict[str, Any]:
@@ -154,14 +160,14 @@ class SumoTrafficSignalEnv(gym.Env):
         vehicle_counts = [metric.vehicle_count_total for metric in approach_metrics.values()]
         speed_values = [metric.speed for metric in approach_metrics.values()]
         mean_speed = float(sum(speed_values) / len(speed_values)) if speed_values else 0.0
-        arrived = int(self.traci.simulation.getArrivedNumber())
-        self._arrived_total += arrived
+        self._arrived_total += int(arrived_delta)
         if tail_queue is None:
             tail_queue = max((metric.queue_max for metric in approach_metrics.values()), default=0.0)
         if reward_result is None:
             reward_components = {
                 "queue_penalty": 0.0,
                 "wait_penalty": 0.0,
+                "throughput_reward": 0.0,
                 "switch_penalty": 0.0,
                 "safety_penalty": 0.0,
                 "tail_queue_penalty": 0.0,
@@ -172,6 +178,7 @@ class SumoTrafficSignalEnv(gym.Env):
             reward_components = {
                 "queue_penalty": reward_result.queue_penalty,
                 "wait_penalty": reward_result.wait_penalty,
+                "throughput_reward": reward_result.throughput_reward,
                 "switch_penalty": reward_result.switch_penalty,
                 "safety_penalty": reward_result.safety_penalty,
                 "tail_queue_penalty": reward_result.tail_queue_penalty,
@@ -187,6 +194,7 @@ class SumoTrafficSignalEnv(gym.Env):
             "mean_speed": mean_speed,
             "vehicle_count": float(sum(vehicle_counts)),
             "arrived_vehicles": self._arrived_total,
+            "interval_arrived_vehicles": int(arrived_delta),
             "spawned_vehicles": spawned,
             "active_accidents": self.accidents.active_accident_count,
             "active_accident_vehicles": self.accidents.active_vehicle_count,

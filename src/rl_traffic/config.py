@@ -52,6 +52,7 @@ class RewardConfig:
     name: str = "queue_wait_switch"
     queue_weight: float = 1.0
     wait_weight: float = 0.01
+    throughput_weight: float = 0.0
     switch_weight: float = 0.1
     safety_weight: float = 0.05
     tail_queue_weight: float = 0.0
