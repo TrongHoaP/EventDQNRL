@@ -55,6 +55,14 @@ def validation_score(metrics: list[EpisodeMetrics], config) -> float:
     )
 
 
+def capacity_score(metrics: EpisodeMetrics, config) -> float:
+    return (
+        metrics.total_reward
+        - config.capacity_score_wasted_green_weight * metrics.wasted_green_ratio
+        - config.capacity_score_event_green_weight * metrics.event_direction_green_ratio
+    )
+
+
 def append_checkpoint_metrics(path: str | Path, row: dict[str, object]) -> None:
     output = Path(path)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -120,6 +128,7 @@ def main() -> int:
         env.close()
         best_reward = None
         best_stable_score = None
+        best_capacity_score = None
         best_validation_score = None
         reward_window: deque[float] = deque(maxlen=max(1, config.training.checkpoint_window))
         for episode in range(episodes):
@@ -132,8 +141,10 @@ def main() -> int:
             agent.save(run_dir(name) / "checkpoints" / "latest.pt")
             reward_window.append(metrics.total_reward)
             stable_score = mean(reward_window)
+            capacity_metric = capacity_score(metrics, config.training)
             is_best_train = best_reward is None or metrics.total_reward > best_reward
             is_best_stable = best_stable_score is None or stable_score > best_stable_score
+            is_best_capacity = best_capacity_score is None or capacity_metric > best_capacity_score
             if best_reward is None or metrics.total_reward > best_reward:
                 best_reward = metrics.total_reward
                 agent.save(run_dir(name) / "checkpoints" / "best.pt")
@@ -141,6 +152,9 @@ def main() -> int:
             if is_best_stable:
                 best_stable_score = stable_score
                 agent.save(run_dir(name) / "checkpoints" / "best_stable.pt")
+            if is_best_capacity:
+                best_capacity_score = capacity_metric
+                agent.save(run_dir(name) / "checkpoints" / "best_capacity.pt")
             validation_metric = None
             if (
                 config.training.validation_interval > 0
@@ -159,13 +173,16 @@ def main() -> int:
                     "seed": config.sumo.seed + episode,
                     "reward": metrics.total_reward,
                     "stable_score": stable_score,
+                    "capacity_score": capacity_metric,
                     "checkpoint_window": len(reward_window),
                     "best_reward": best_reward,
                     "best_stable_score": best_stable_score,
+                    "best_capacity_score": best_capacity_score,
                     "validation_score": validation_metric,
                     "best_validation_score": best_validation_score,
                     "is_best_train": is_best_train,
                     "is_best_stable": is_best_stable,
+                    "is_best_capacity": is_best_capacity,
                 },
             )
             print(

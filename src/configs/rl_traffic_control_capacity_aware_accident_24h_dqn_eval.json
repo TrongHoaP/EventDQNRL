@@ -1,0 +1,82 @@
+{
+  "sumo": {
+    "sumocfg": "scenarios/grid/grid.sumocfg",
+    "spawn_config": "src/configs/simulation_density_spawn_config.json",
+    "accident_config": "src/configs/accident_spawn_events.json",
+    "capacity_config": "src/configs/event_capacity_rules.json",
+    "gui": false,
+    "seed": 7,
+    "step_length": 2.0,
+    "end_time": 86400,
+    "demand_scale": 0.2,
+    "disable_accidents": false
+  },
+  "control": {
+    "decision_interval_seconds": 10,
+    "yellow_time_seconds": 3.0,
+    "min_green_seconds": 10.0,
+    "max_green_seconds": 60.0
+  },
+  "safety": {
+    "enabled": true,
+    "invalid_action_policy": "hold",
+    "enforce_min_green": true,
+    "enforce_max_green": true,
+    "enforce_green_phase_only": true,
+    "override_penalty": 0.05
+  },
+  "state": {
+    "mode": "approach_level",
+    "include_capacity": true
+  },
+  "reward": {
+    "name": "queue_wait_switch",
+    "queue_weight": 1.0,
+    "wait_weight": 0.5,
+    "throughput_weight": 0.8,
+    "switch_weight": 0.1,
+    "safety_weight": 1.0,
+    "tail_queue_weight": 0.3,
+    "queue_spike_threshold": 10.0,
+    "queue_spike_weight": 0.5,
+    "tail_queue_spike_threshold": 4.0,
+    "tail_queue_spike_weight": 0.5,
+    "wasted_green_weight": 0.5
+  },
+  "training": {
+    "episodes": 50,
+    "batch_size": 64,
+    "learning_rate": 0.001,
+    "gamma": 0.99,
+    "replay_size": 20000,
+    "min_replay_size": 256,
+    "epsilon_start": 1.0,
+    "epsilon_end": 0.08,
+    "epsilon_decay_steps": 45000,
+    "target_update_steps": 500,
+    "hidden_size": 128,
+    "device": "auto",
+    "run_name": "dqn_capacity_aware_accident_50ep",
+    "eval_epsilon": 0.0,
+    "checkpoint_window": 5,
+    "validation_interval": 0,
+    "validation_episodes": 0,
+    "validation_wait_target": 4.46,
+    "validation_throughput_target": 1100.0,
+    "validation_wait_penalty_weight": 20.0,
+    "validation_throughput_penalty_weight": 0.2,
+    "validation_safety_penalty_weight": 20.0,
+    "validation_max_queue_target": 10.65,
+    "validation_tail_queue_target": 4.0,
+    "validation_max_queue_penalty_weight": 20.0,
+    "validation_tail_queue_penalty_weight": 10.0
+  },
+  "evaluation": {
+    "controllers": [
+      "dqn"
+    ],
+    "episodes": 1,
+    "fixed_cycle_seconds": 42,
+    "actuated_queue_threshold": 4.0
+  }
+}

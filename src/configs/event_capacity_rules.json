@@ -1,0 +1,30 @@
+{
+  "default_capacity": 1.0,
+  "directions": ["N", "E", "S", "W"],
+  "edge_rules": [
+    {
+      "edge_id": "B2B1",
+      "direction": "N",
+      "capacity": 0.0
+    },
+    {
+      "edge_id": "B0B1",
+      "direction": "S",
+      "capacity": 0.0
+    },
+    {
+      "edge_id": "C1B1",
+      "direction": "E",
+      "capacity": 0.0
+    },
+    {
+      "edge_id": "A1B1",
+      "direction": "W",
+      "capacity": 0.0
+    }
+  ],
+  "action_served_directions": {
+    "0": ["N", "S"],
+    "1": ["E", "W"]
+  }
+}

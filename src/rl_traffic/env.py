@@ -7,6 +7,13 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 
+from src.rl_traffic.capacity import (
+    CapacityTracker,
+    compute_directional_values,
+    compute_effective_arrived,
+    compute_wasted_green,
+    load_capacity_rules,
+)
 from src.rl_traffic.config import TrafficRLConfig
 from src.rl_traffic.rewards import RewardInputs, RewardResult, build_reward
 from src.rl_traffic.safety import SafetyLayer
@@ -24,6 +31,10 @@ class SumoTrafficSignalEnv(gym.Env):
         self.session = SumoSession(config.sumo)
         self.spawner = DemandSpawner.from_config(config.sumo)
         self.accidents = AccidentManager.from_config(config.sumo)
+        self.capacity_tracker = CapacityTracker(
+            load_capacity_rules(config.sumo.capacity_config),
+            config.sumo.accident_config,
+        )
         self.reward_fn = build_reward(config.reward)
         self.safety = SafetyLayer(config.safety, config.control)
         self.traci: Any | None = None
@@ -42,6 +53,10 @@ class SumoTrafficSignalEnv(gym.Env):
         self.close()
         self.spawner = DemandSpawner.from_config(self.config.sumo, seed=seed)
         self.accidents = AccidentManager.from_config(self.config.sumo)
+        self.capacity_tracker = CapacityTracker(
+            load_capacity_rules(self.config.sumo.capacity_config),
+            self.config.sumo.accident_config,
+        )
         self.traci = self.session.start(seed=seed)
         self.controller = TrafficLightController(
             traci_module=self.traci,
@@ -75,6 +90,28 @@ class SumoTrafficSignalEnv(gym.Env):
         spawned, spawned_accidents, arrived_delta = self._advance_control_interval()
         total_queue, total_wait = self.controller._network_totals()
         tail_queue = self._tail_queue()
+        simulation_time = float(self.traci.simulation.getTime())
+        capacity_by_direction = self.capacity_tracker.capacity_by_direction(simulation_time)
+        directional_values = self._directional_values(capacity_by_direction)
+        if all(capacity >= 1.0 for capacity in capacity_by_direction.values()):
+            directional_values = directional_values.__class__(
+                total_queue=float(total_queue),
+                total_wait=float(total_wait),
+                total_tail_queue=float(tail_queue),
+                effective_queue=float(total_queue),
+                effective_wait=float(total_wait),
+                effective_tail_queue=float(tail_queue),
+                event_direction_queue=0.0,
+                event_direction_wait=0.0,
+                non_event_direction_queue=float(total_queue),
+                non_event_direction_wait=float(total_wait),
+            )
+        effective_arrived_delta = compute_effective_arrived(
+            arrived_delta,
+            capacity_by_direction,
+        )
+        served_directions = self.capacity_tracker.served_directions(safety_decision.action)
+        wasted_green = compute_wasted_green(served_directions, capacity_by_direction)
         reward_result = self.reward_fn(
             RewardInputs(
                 total_queue=total_queue,
@@ -83,6 +120,11 @@ class SumoTrafficSignalEnv(gym.Env):
                 tail_queue=tail_queue,
                 switched=switched,
                 safety_overridden=safety_decision.overridden,
+                effective_queue=directional_values.effective_queue,
+                effective_wait=directional_values.effective_wait,
+                effective_arrived_delta=effective_arrived_delta,
+                effective_tail_queue=directional_values.effective_tail_queue,
+                wasted_green=wasted_green,
             )
         )
         terminated = self.traci.simulation.getMinExpectedNumber() == 0
@@ -95,6 +137,11 @@ class SumoTrafficSignalEnv(gym.Env):
             arrived_delta=arrived_delta,
             reward_result=reward_result,
             tail_queue=tail_queue,
+            capacity_by_direction=capacity_by_direction,
+            directional_values=directional_values,
+            effective_arrived_delta=effective_arrived_delta,
+            wasted_green=wasted_green,
+            served_directions=served_directions,
         )
         return self._observation(), reward_result.total, bool(terminated), bool(truncated), info
 
@@ -128,10 +175,13 @@ class SumoTrafficSignalEnv(gym.Env):
     def _observation(self) -> np.ndarray:
         assert self.controller is not None
         if self.config.state.mode == "approach_level":
-            return self.controller.get_approach_state_vector()
+            observation = self.controller.get_approach_state_vector()
         if self.config.state.mode != "lane_level":
+            if self.config.state.mode == "approach_level":
+                return self._append_capacity_observation(observation)
             raise ValueError(f"Unsupported state mode: {self.config.state.mode}")
-        return self.controller.get_state()
+        observation = self.controller.get_state()
+        return self._append_capacity_observation(observation)
 
     def get_valid_action_mask(self) -> np.ndarray:
         if self.controller is None:
@@ -143,6 +193,49 @@ class SumoTrafficSignalEnv(gym.Env):
         approach_metrics = self.controller.get_approach_metrics()
         return max((metrics.queue_max for metrics in approach_metrics.values()), default=0.0)
 
+    def _append_capacity_observation(self, observation: np.ndarray) -> np.ndarray:
+        if not self.config.state.include_capacity:
+            return observation
+        assert self.traci is not None
+        capacity_by_direction = self.capacity_tracker.capacity_by_direction(
+            float(self.traci.simulation.getTime())
+        )
+        features: list[float] = []
+        for direction in self.capacity_tracker.rules.directions:
+            capacity = float(capacity_by_direction.get(direction, 1.0))
+            features.extend([capacity, 1.0 if capacity < 1.0 else 0.0])
+        return np.concatenate(
+            [observation.astype(np.float32), np.asarray(features, dtype=np.float32)]
+        )
+
+    def _directional_values(self, capacity_by_direction: dict[str, float]):
+        assert self.controller is not None
+        approach_metrics = self.controller.get_approach_metrics()
+        queue_by_direction = {
+            direction: _metric_float(metric, "queue_max", "queue", "queue_total")
+            for direction, metric in approach_metrics.items()
+        }
+        wait_by_direction = {
+            direction: _metric_float(
+                metric,
+                "waiting_time_total",
+                "wait_total",
+                "waiting_time",
+                "wait",
+            )
+            for direction, metric in approach_metrics.items()
+        }
+        tail_queue_by_direction = {
+            direction: _metric_float(metric, "queue_max", "queue", "queue_total")
+            for direction, metric in approach_metrics.items()
+        }
+        return compute_directional_values(
+            queue_by_direction,
+            wait_by_direction,
+            tail_queue_by_direction,
+            capacity_by_direction,
+        )
+
     def _info(
         self,
         switched: bool,
@@ -152,6 +245,11 @@ class SumoTrafficSignalEnv(gym.Env):
         arrived_delta: int,
         reward_result: RewardResult | None = None,
         tail_queue: float | None = None,
+        capacity_by_direction: dict[str, float] | None = None,
+        directional_values: Any | None = None,
+        effective_arrived_delta: float = 0.0,
+        wasted_green: float = 0.0,
+        served_directions: tuple[str, ...] = (),
     ) -> dict[str, Any]:
         assert self.traci is not None
         assert self.controller is not None
@@ -163,6 +261,25 @@ class SumoTrafficSignalEnv(gym.Env):
         self._arrived_total += int(arrived_delta)
         if tail_queue is None:
             tail_queue = max((metric.queue_max for metric in approach_metrics.values()), default=0.0)
+        if capacity_by_direction is None:
+            capacity_by_direction = self.capacity_tracker.capacity_by_direction(
+                float(self.traci.simulation.getTime())
+            )
+        if directional_values is None:
+            directional_values = self._directional_values(capacity_by_direction)
+            if all(capacity >= 1.0 for capacity in capacity_by_direction.values()):
+                directional_values = directional_values.__class__(
+                    total_queue=float(total_queue),
+                    total_wait=float(total_wait),
+                    total_tail_queue=float(tail_queue),
+                    effective_queue=float(total_queue),
+                    effective_wait=float(total_wait),
+                    effective_tail_queue=float(tail_queue),
+                    event_direction_queue=0.0,
+                    event_direction_wait=0.0,
+                    non_event_direction_queue=float(total_queue),
+                    non_event_direction_wait=float(total_wait),
+                )
         if reward_result is None:
             reward_components = {
                 "queue_penalty": 0.0,
@@ -173,6 +290,7 @@ class SumoTrafficSignalEnv(gym.Env):
                 "tail_queue_penalty": 0.0,
                 "queue_spike_penalty": 0.0,
                 "tail_queue_spike_penalty": 0.0,
+                "wasted_green_penalty": 0.0,
             }
         else:
             reward_components = {
@@ -184,7 +302,12 @@ class SumoTrafficSignalEnv(gym.Env):
                 "tail_queue_penalty": reward_result.tail_queue_penalty,
                 "queue_spike_penalty": reward_result.queue_spike_penalty,
                 "tail_queue_spike_penalty": reward_result.tail_queue_spike_penalty,
+                "wasted_green_penalty": reward_result.wasted_green_penalty,
             }
+        event_green_count = sum(
+            1 for direction in served_directions if capacity_by_direction.get(direction, 1.0) <= 0.0
+        )
+        event_active = any(capacity < 1.0 for capacity in capacity_by_direction.values())
         return {
             "controller_name": self.controller_name,
             "simulation_time": float(self.traci.simulation.getTime()),
@@ -195,6 +318,17 @@ class SumoTrafficSignalEnv(gym.Env):
             "vehicle_count": float(sum(vehicle_counts)),
             "arrived_vehicles": self._arrived_total,
             "interval_arrived_vehicles": int(arrived_delta),
+            "effective_queue": directional_values.effective_queue,
+            "effective_wait": directional_values.effective_wait,
+            "effective_tail_queue": directional_values.effective_tail_queue,
+            "effective_arrived_delta": float(effective_arrived_delta),
+            "wasted_green": float(wasted_green),
+            "event_active": event_active,
+            "event_direction_green": 1 if event_green_count > 0 else 0,
+            "event_direction_queue": directional_values.event_direction_queue,
+            "event_direction_wait": directional_values.event_direction_wait,
+            "non_event_direction_queue": directional_values.non_event_direction_queue,
+            "non_event_direction_wait": directional_values.non_event_direction_wait,
             "spawned_vehicles": spawned,
             "active_accidents": self.accidents.active_accident_count,
             "active_accident_vehicles": self.accidents.active_vehicle_count,
@@ -207,3 +341,10 @@ class SumoTrafficSignalEnv(gym.Env):
             "valid_action_mask": self.get_valid_action_mask(),
             **reward_components,
         }
+
+
+def _metric_float(metric: Any, *names: str) -> float:
+    for name in names:
+        if hasattr(metric, name):
+            return float(getattr(metric, name))
+    return 0.0

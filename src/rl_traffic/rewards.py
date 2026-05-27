@@ -14,6 +14,11 @@ class RewardInputs:
     tail_queue: float
     switched: bool
     safety_overridden: bool
+    effective_queue: float
+    effective_wait: float
+    effective_arrived_delta: float
+    effective_tail_queue: float
+    wasted_green: float
 
 
 @dataclass(frozen=True)
@@ -27,6 +32,7 @@ class RewardResult:
     tail_queue_penalty: float
     queue_spike_penalty: float
     tail_queue_spike_penalty: float
+    wasted_green_penalty: float
 
 
 class RewardFunction(Protocol):
@@ -39,16 +45,17 @@ class QueueWaitSwitchReward:
         self.config = config
 
     def __call__(self, inputs: RewardInputs) -> RewardResult:
-        queue_penalty = -(self.config.queue_weight * inputs.total_queue)
-        wait_penalty = -(self.config.wait_weight * inputs.total_wait)
-        throughput_reward = self.config.throughput_weight * inputs.arrived_delta
+        queue_penalty = -(self.config.queue_weight * inputs.effective_queue)
+        wait_penalty = -(self.config.wait_weight * inputs.effective_wait)
+        throughput_reward = self.config.throughput_weight * inputs.effective_arrived_delta
         switch_penalty = -self.config.switch_weight if inputs.switched else 0.0
         safety_penalty = -self.config.safety_weight if inputs.safety_overridden else 0.0
-        tail_queue_penalty = -(self.config.tail_queue_weight * inputs.tail_queue)
-        queue_spike = max(0.0, inputs.total_queue - self.config.queue_spike_threshold)
-        tail_queue_spike = max(0.0, inputs.tail_queue - self.config.tail_queue_spike_threshold)
+        tail_queue_penalty = -(self.config.tail_queue_weight * inputs.effective_tail_queue)
+        queue_spike = max(0.0, inputs.effective_queue - self.config.queue_spike_threshold)
+        tail_queue_spike = max(0.0, inputs.effective_tail_queue - self.config.tail_queue_spike_threshold)
         queue_spike_penalty = -(self.config.queue_spike_weight * queue_spike)
         tail_queue_spike_penalty = -(self.config.tail_queue_spike_weight * tail_queue_spike)
+        wasted_green_penalty = -(self.config.wasted_green_weight * inputs.wasted_green)
         total = (
             queue_penalty
             + wait_penalty
@@ -58,6 +65,7 @@ class QueueWaitSwitchReward:
             + tail_queue_penalty
             + queue_spike_penalty
             + tail_queue_spike_penalty
+            + wasted_green_penalty
         )
         return RewardResult(
             total=float(total),
@@ -69,6 +77,7 @@ class QueueWaitSwitchReward:
             tail_queue_penalty=float(tail_queue_penalty),
             queue_spike_penalty=float(queue_spike_penalty),
             tail_queue_spike_penalty=float(tail_queue_spike_penalty),
+            wasted_green_penalty=float(wasted_green_penalty),
         )
 
 

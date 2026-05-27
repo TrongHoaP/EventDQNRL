@@ -14,6 +14,7 @@ class SumoConfig:
     sumocfg: str = "scenarios/grid/grid.sumocfg"
     spawn_config: str = "src/configs/simulation_density_spawn_config.json"
     accident_config: str = "src/configs/accident_spawn_events.json"
+    capacity_config: str = ""
     gui: bool = False
     seed: int = 7
     step_length: float = 1.0
@@ -45,6 +46,7 @@ class SafetyConfig:
 @dataclass(frozen=True)
 class StateConfig:
     mode: str = "lane_level"
+    include_capacity: bool = False
 
 
 @dataclass(frozen=True)
@@ -60,6 +62,7 @@ class RewardConfig:
     queue_spike_weight: float = 0.0
     tail_queue_spike_threshold: float = 0.0
     tail_queue_spike_weight: float = 0.0
+    wasted_green_weight: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -94,6 +97,8 @@ class TrainingConfig:
     validation_tail_queue_target: float = 4.0
     validation_max_queue_penalty_weight: float = 20.0
     validation_tail_queue_penalty_weight: float = 10.0
+    capacity_score_wasted_green_weight: float = 0.0
+    capacity_score_event_green_weight: float = 0.0
 
 
 @dataclass(frozen=True)

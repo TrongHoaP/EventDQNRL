@@ -21,6 +21,7 @@ class EpisodeMetrics:
     mean_speed: float = 0.0
     throughput: float = 0.0
     interval_arrived_vehicles: float = 0.0
+    effective_arrived_delta: float = 0.0
     num_switches: int = 0
     num_safety_overrides: int = 0
     episode_seconds: float = 0.0
@@ -36,6 +37,21 @@ class EpisodeMetrics:
     tail_queue_penalty: float = 0.0
     queue_spike_penalty: float = 0.0
     tail_queue_spike_penalty: float = 0.0
+    wasted_green_penalty: float = 0.0
+    effective_queue: float = 0.0
+    effective_wait: float = 0.0
+    effective_tail_queue: float = 0.0
+    wasted_green_ratio: float = 0.0
+    event_direction_green_ratio: float = 0.0
+    event_active_ratio: float = 0.0
+    wasted_green_when_event_active: float = 0.0
+    event_direction_green_when_event_active: float = 0.0
+    non_event_queue_when_event_active: float = 0.0
+    non_event_wait_when_event_active: float = 0.0
+    mean_queue_non_event_directions: float = 0.0
+    mean_wait_non_event_directions: float = 0.0
+    mean_queue_event_directions: float = 0.0
+    mean_wait_event_directions: float = 0.0
     queue_p90: float = 0.0
     queue_p95: float = 0.0
     tail_queue_p90: float = 0.0
@@ -46,6 +62,20 @@ class EpisodeMetricAccumulator:
         self.metrics = EpisodeMetrics(controller_name, episode, seed)
         self._queue_sum = 0.0
         self._wait_sum = 0.0
+        self._effective_queue_sum = 0.0
+        self._effective_wait_sum = 0.0
+        self._effective_tail_queue_sum = 0.0
+        self._wasted_green_sum = 0.0
+        self._event_direction_green_sum = 0.0
+        self._event_active_steps = 0
+        self._event_active_wasted_green_sum = 0.0
+        self._event_active_direction_green_sum = 0.0
+        self._event_active_non_event_queue_sum = 0.0
+        self._event_active_non_event_wait_sum = 0.0
+        self._non_event_queue_sum = 0.0
+        self._non_event_wait_sum = 0.0
+        self._event_queue_sum = 0.0
+        self._event_wait_sum = 0.0
         self._speed_sum = 0.0
         self._speed_count = 0
         self._queue_values: list[float] = []
@@ -64,6 +94,9 @@ class EpisodeMetricAccumulator:
         self.metrics.throughput = float(info.get("arrived_vehicles", self.metrics.throughput))
         self.metrics.interval_arrived_vehicles += float(
             info.get("interval_arrived_vehicles", 0.0)
+        )
+        self.metrics.effective_arrived_delta += float(
+            info.get("effective_arrived_delta", 0.0)
         )
         self.metrics.episode_seconds = float(info.get("simulation_time", self.metrics.episode_seconds))
         self.metrics.tail_queue = max(self.metrics.tail_queue, float(info.get("tail_queue", 0.0)))
@@ -86,8 +119,26 @@ class EpisodeMetricAccumulator:
         self.metrics.tail_queue_penalty += float(info.get("tail_queue_penalty", 0.0))
         self.metrics.queue_spike_penalty += float(info.get("queue_spike_penalty", 0.0))
         self.metrics.tail_queue_spike_penalty += float(info.get("tail_queue_spike_penalty", 0.0))
+        self.metrics.wasted_green_penalty += float(info.get("wasted_green_penalty", 0.0))
         self._queue_sum += queue
         self._wait_sum += wait
+        self._effective_queue_sum += float(info.get("effective_queue", queue))
+        self._effective_wait_sum += float(info.get("effective_wait", wait))
+        self._effective_tail_queue_sum += float(info.get("effective_tail_queue", 0.0))
+        self._wasted_green_sum += float(info.get("wasted_green", 0.0))
+        self._event_direction_green_sum += float(info.get("event_direction_green", 0.0))
+        non_event_queue = float(info.get("non_event_direction_queue", 0.0))
+        non_event_wait = float(info.get("non_event_direction_wait", 0.0))
+        self._non_event_queue_sum += non_event_queue
+        self._non_event_wait_sum += non_event_wait
+        self._event_queue_sum += float(info.get("event_direction_queue", 0.0))
+        self._event_wait_sum += float(info.get("event_direction_wait", 0.0))
+        if bool(info.get("event_active", False)):
+            self._event_active_steps += 1
+            self._event_active_wasted_green_sum += float(info.get("wasted_green", 0.0))
+            self._event_active_direction_green_sum += float(info.get("event_direction_green", 0.0))
+            self._event_active_non_event_queue_sum += non_event_queue
+            self._event_active_non_event_wait_sum += non_event_wait
         self._speed_sum += speed
         self._speed_count += 1
         self._queue_values.append(queue)
@@ -97,6 +148,29 @@ class EpisodeMetricAccumulator:
         steps = max(self.metrics.steps, 1)
         self.metrics.mean_queue = self._queue_sum / steps
         self.metrics.mean_waiting_time = self._wait_sum / steps
+        self.metrics.effective_queue = self._effective_queue_sum / steps
+        self.metrics.effective_wait = self._effective_wait_sum / steps
+        self.metrics.effective_tail_queue = self._effective_tail_queue_sum / steps
+        self.metrics.wasted_green_ratio = self._wasted_green_sum / steps
+        self.metrics.event_direction_green_ratio = self._event_direction_green_sum / steps
+        self.metrics.event_active_ratio = self._event_active_steps / steps
+        event_steps = max(self._event_active_steps, 1)
+        self.metrics.wasted_green_when_event_active = (
+            self._event_active_wasted_green_sum / event_steps
+        )
+        self.metrics.event_direction_green_when_event_active = (
+            self._event_active_direction_green_sum / event_steps
+        )
+        self.metrics.non_event_queue_when_event_active = (
+            self._event_active_non_event_queue_sum / event_steps
+        )
+        self.metrics.non_event_wait_when_event_active = (
+            self._event_active_non_event_wait_sum / event_steps
+        )
+        self.metrics.mean_queue_non_event_directions = self._non_event_queue_sum / steps
+        self.metrics.mean_wait_non_event_directions = self._non_event_wait_sum / steps
+        self.metrics.mean_queue_event_directions = self._event_queue_sum / steps
+        self.metrics.mean_wait_event_directions = self._event_wait_sum / steps
         self.metrics.mean_speed = self._speed_sum / max(self._speed_count, 1)
         self.metrics.queue_p90 = _percentile(self._queue_values, 0.90)
         self.metrics.queue_p95 = _percentile(self._queue_values, 0.95)
