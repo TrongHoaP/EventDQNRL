@@ -12,6 +12,8 @@ class EpisodeMetrics:
     controller_name: str
     episode: int
     seed: int
+    effective_controller_name: str = ""
+    safety_enabled: bool = False
     total_reward: float = 0.0
     steps: int = 0
     mean_queue: float = 0.0
@@ -87,6 +89,10 @@ class EpisodeMetricAccumulator:
         speed = float(info.get("mean_speed", 0.0))
         self.metrics.total_reward += float(reward)
         self.metrics.steps += 1
+        self.metrics.effective_controller_name = str(
+            info.get("effective_controller_name", self.metrics.controller_name)
+        )
+        self.metrics.safety_enabled = bool(info.get("safety_enabled", False))
         self.metrics.max_queue = max(self.metrics.max_queue, queue)
         self.metrics.total_waiting_time += wait
         self.metrics.num_switches += int(bool(info.get("switched", False)))

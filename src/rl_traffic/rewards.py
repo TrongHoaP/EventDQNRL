@@ -82,6 +82,6 @@ class QueueWaitSwitchReward:
 
 
 def build_reward(config: RewardConfig) -> RewardFunction:
-    if config.name != "queue_wait_switch":
+    if config.name not in {"queue_wait_switch", "queue_weighted_wait_time"}:
         raise ValueError(f"Unsupported reward function: {config.name}")
     return QueueWaitSwitchReward(config)

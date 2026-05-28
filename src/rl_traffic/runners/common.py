@@ -44,6 +44,7 @@ def run_episode(
                 "next_state": observation,
                 "done": terminated or truncated,
                 "info": next_info,
+                "next_valid_action_mask": next_info.get("valid_action_mask"),
             }
         )
         accumulator.update(reward, next_info)
@@ -53,4 +54,3 @@ def run_episode(
 
 def run_dir(run_name: str) -> Path:
     return Path("runs") / run_name
-

@@ -36,6 +36,7 @@ class Transition:
     reward: float
     next_state: np.ndarray
     done: bool
+    next_valid_action_mask: np.ndarray | None = None
 
 
 class ReplayBuffer:
@@ -104,6 +105,11 @@ class DQNAgent:
                 reward=float(transition["reward"]),
                 next_state=np.asarray(transition["next_state"], dtype=np.float32),
                 done=bool(transition["done"]),
+                next_valid_action_mask=(
+                    None
+                    if transition.get("next_valid_action_mask") is None
+                    else np.asarray(transition["next_valid_action_mask"], dtype=bool)
+                ),
             )
         )
         if len(self.replay) >= max(self.config.min_replay_size, self.config.batch_size):
@@ -128,7 +134,24 @@ class DQNAgent:
 
         q_values = self.policy(states).gather(1, actions).squeeze(1)
         with torch.no_grad():
-            next_q_values = self.target(next_states).max(dim=1).values
+            next_q = self.target(next_states)
+            next_masks_raw = [item.next_valid_action_mask for item in batch]
+            if all(mask is not None for mask in next_masks_raw):
+                next_masks = torch.as_tensor(
+                    np.stack(
+                        [
+                            np.asarray(mask, dtype=bool)
+                            for mask in next_masks_raw
+                        ]
+                    ),
+                    dtype=torch.bool,
+                    device=self.device,
+                )
+                empty_rows = ~next_masks.any(dim=1)
+                if empty_rows.any():
+                    next_masks[empty_rows] = True
+                next_q = next_q.masked_fill(~next_masks, -1e9)
+            next_q_values = next_q.max(dim=1).values
             targets = rewards + self.config.gamma * next_q_values * (1.0 - dones)
         loss = nn.functional.smooth_l1_loss(q_values, targets)
         self.optimizer.zero_grad()

@@ -127,8 +127,9 @@ class SumoTrafficSignalEnv(gym.Env):
                 wasted_green=wasted_green,
             )
         )
-        terminated = self.traci.simulation.getMinExpectedNumber() == 0
-        truncated = self.traci.simulation.getTime() >= self.config.sumo.end_time
+        simulation_time = float(self.traci.simulation.getTime())
+        terminated = False
+        truncated = simulation_time >= self.config.sumo.end_time
         info = self._info(
             switched=switched,
             safety_decision=safety_decision,
@@ -168,6 +169,8 @@ class SumoTrafficSignalEnv(gym.Env):
             spawned += self.spawner.spawn_due_until(self.traci, current_time)
             spawned_accidents += self.accidents.advance(self.traci, current_time)
             self.traci.simulationStep()
+            if self.controller is not None:
+                self.controller.finalize_pending_transitions()
             arrived_delta += int(self.traci.simulation.getArrivedNumber())
             self.accidents.pin_active(self.traci)
         return spawned, spawned_accidents, arrived_delta
@@ -235,6 +238,32 @@ class SumoTrafficSignalEnv(gym.Env):
             tail_queue_by_direction,
             capacity_by_direction,
         )
+
+    def _phase_pressure(self) -> list[float]:
+        assert self.controller is not None
+        approach_metrics = self.controller.get_approach_metrics()
+        pressures: list[float] = []
+        for action, _ in enumerate(self.controller.action_map):
+            incoming_pressure = 0.0
+            for direction in self.capacity_tracker.served_directions(action):
+                metric = self._approach_metric_for_direction(direction, approach_metrics)
+                if metric is None:
+                    continue
+                incoming_pressure += float(
+                    getattr(metric, "queue_max", getattr(metric, "queue", 0.0))
+                )
+            pressures.append(incoming_pressure)
+        return pressures
+
+    def _approach_metric_for_direction(
+        self,
+        direction: str,
+        approach_metrics: dict[str, Any],
+    ) -> Any | None:
+        for rule in self.capacity_tracker.rules.edge_rules:
+            if rule.direction == direction and rule.edge_id in approach_metrics:
+                return approach_metrics[rule.edge_id]
+        return approach_metrics.get(direction)
 
     def _info(
         self,
@@ -339,6 +368,11 @@ class SumoTrafficSignalEnv(gym.Env):
             "safety_overridden": False if safety_decision is None else safety_decision.overridden,
             "safety_reason": "reset" if safety_decision is None else safety_decision.reason,
             "valid_action_mask": self.get_valid_action_mask(),
+            "phase_pressure": self._phase_pressure(),
+            "safety_enabled": bool(self.config.safety.enabled),
+            "effective_controller_name": f"{self.controller_name}_safety"
+            if self.config.safety.enabled
+            else self.controller_name,
             **reward_components,
         }
 

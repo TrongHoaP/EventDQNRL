@@ -144,6 +144,8 @@ class TrafficLightController:
         self.last_action: int | None = None
         self.last_total_queue = 0.0
         self.last_total_wait = 0.0
+        self.pending_green_after_yellow: dict[str, int] = {}
+        self.pending_yellow_until: dict[str, float] = {}
 
         self.reset()
 
@@ -182,6 +184,8 @@ class TrafficLightController:
         self.last_switch_time = {traffic_light_id: now for traffic_light_id in self.specs}
         self.last_action = None
         self.last_total_queue, self.last_total_wait = self._network_totals()
+        self.pending_green_after_yellow = {}
+        self.pending_yellow_until = {}
         return self.get_state()
 
     def get_state(self) -> np.ndarray:
@@ -251,6 +255,10 @@ class TrafficLightController:
             raise ValueError(f"Invalid action {action}; expected 0..{self.action_size - 1}.")
 
         traffic_light_id, target_green = self.action_map[action]
+        if traffic_light_id in self.pending_green_after_yellow:
+            self.last_action = action
+            return False
+
         current_phase = self.traci.trafficlight.getPhase(traffic_light_id)
         now = self._sim_time()
         elapsed = now - self.last_switch_time.get(traffic_light_id, now)
@@ -267,13 +275,32 @@ class TrafficLightController:
         if yellow_phase is not None and self.yellow_time > 0:
             self.traci.trafficlight.setPhase(traffic_light_id, yellow_phase)
             self.traci.trafficlight.setPhaseDuration(traffic_light_id, self.yellow_time)
-            self._advance_steps(int(round(self.yellow_time)))
+            self.pending_green_after_yellow[traffic_light_id] = target_green
+            self.pending_yellow_until[traffic_light_id] = now + self.yellow_time
+            self.last_action = action
+            return True
 
         self.traci.trafficlight.setPhase(traffic_light_id, target_green)
         self.traci.trafficlight.setPhaseDuration(traffic_light_id, self.decision_interval)
         self.last_switch_time[traffic_light_id] = self._sim_time()
         self.last_action = action
         return True
+
+    def finalize_pending_transitions(self) -> None:
+        now = self._sim_time()
+        for traffic_light_id in list(self.pending_green_after_yellow):
+            until = self.pending_yellow_until.get(traffic_light_id, 0.0)
+            if now < until:
+                continue
+
+            target_green = self.pending_green_after_yellow.pop(traffic_light_id)
+            self.pending_yellow_until.pop(traffic_light_id, None)
+            self.traci.trafficlight.setPhase(traffic_light_id, target_green)
+            self.traci.trafficlight.setPhaseDuration(
+                traffic_light_id,
+                self.decision_interval,
+            )
+            self.last_switch_time[traffic_light_id] = now
 
     def compute_reward(self, switched: bool = False) -> float:
         """Reward lower queues and waiting time, with a small switching penalty."""
