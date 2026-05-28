@@ -11,7 +11,13 @@ from statistics import mean
 from src.rl_traffic.dqn import DQNAgent
 from src.rl_traffic.env import SumoTrafficSignalEnv
 from src.rl_traffic.metrics import EpisodeMetrics, append_episode_metrics
-from src.rl_traffic.runners.common import add_common_args, load_runner_config, run_dir, run_episode
+from src.rl_traffic.runners.common import (
+    add_common_args,
+    experiment_metadata,
+    load_runner_config,
+    run_dir,
+    run_episode,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -82,6 +88,7 @@ def run_validation(
 ) -> list[EpisodeMetrics]:
     validation_agent = agent.clone_for_eval()
     validation_metrics = []
+    metadata = experiment_metadata(config)
     for validation_episode in range(config.training.validation_episodes):
         env = SumoTrafficSignalEnv(config, controller_name=validation_agent.name)
         try:
@@ -91,6 +98,7 @@ def run_validation(
                 validation_agent,
                 episode=train_episode,
                 seed=seed,
+                metadata=metadata,
             )
             row = asdict(metrics)
             row["train_episode"] = train_episode
@@ -116,6 +124,7 @@ def main() -> int:
         config = replace(config, training=replace(config.training, **training_overrides))
     episodes = args.episodes or config.training.episodes
     name = args.run_name or config.training.run_name
+    metadata = experiment_metadata(config)
     env = SumoTrafficSignalEnv(config, controller_name="dqn")
     try:
         observation, _ = env.reset(seed=config.sumo.seed)
@@ -124,6 +133,13 @@ def main() -> int:
             action_dim=env.action_count,
             config=config.training,
             seed=config.sumo.seed,
+        )
+        print(
+            f"train config: variant={metadata['experiment_variant']}, "
+            f"obs_dim={observation.shape[0]}, "
+            f"include_capacity={metadata['include_capacity']}, "
+            f"include_event_features={metadata['include_event_features']}, "
+            f"use_effective_metrics={metadata['use_effective_metrics']}"
         )
         env.close()
         best_reward = None
@@ -134,7 +150,13 @@ def main() -> int:
         for episode in range(episodes):
             env = SumoTrafficSignalEnv(config, controller_name=agent.name)
             try:
-                metrics = run_episode(env, agent, episode=episode, seed=config.sumo.seed + episode)
+                metrics = run_episode(
+                    env,
+                    agent,
+                    episode=episode,
+                    seed=config.sumo.seed + episode,
+                    metadata=metadata,
+                )
             finally:
                 env.close()
             append_episode_metrics(run_dir(name) / "metrics" / "episode_metrics.csv", metrics)

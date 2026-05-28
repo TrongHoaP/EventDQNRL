@@ -45,14 +45,25 @@ class QueueWaitSwitchReward:
         self.config = config
 
     def __call__(self, inputs: RewardInputs) -> RewardResult:
-        queue_penalty = -(self.config.queue_weight * inputs.effective_queue)
-        wait_penalty = -(self.config.wait_weight * inputs.effective_wait)
-        throughput_reward = self.config.throughput_weight * inputs.effective_arrived_delta
+        if self.config.use_effective_metrics:
+            queue_value = inputs.effective_queue
+            wait_value = inputs.effective_wait
+            arrived_value = inputs.effective_arrived_delta
+            tail_queue_value = inputs.effective_tail_queue
+        else:
+            queue_value = inputs.total_queue
+            wait_value = inputs.total_wait
+            arrived_value = inputs.arrived_delta
+            tail_queue_value = inputs.tail_queue
+
+        queue_penalty = -(self.config.queue_weight * queue_value)
+        wait_penalty = -(self.config.wait_weight * wait_value)
+        throughput_reward = self.config.throughput_weight * arrived_value
         switch_penalty = -self.config.switch_weight if inputs.switched else 0.0
         safety_penalty = -self.config.safety_weight if inputs.safety_overridden else 0.0
-        tail_queue_penalty = -(self.config.tail_queue_weight * inputs.effective_tail_queue)
-        queue_spike = max(0.0, inputs.effective_queue - self.config.queue_spike_threshold)
-        tail_queue_spike = max(0.0, inputs.effective_tail_queue - self.config.tail_queue_spike_threshold)
+        tail_queue_penalty = -(self.config.tail_queue_weight * tail_queue_value)
+        queue_spike = max(0.0, queue_value - self.config.queue_spike_threshold)
+        tail_queue_spike = max(0.0, tail_queue_value - self.config.tail_queue_spike_threshold)
         queue_spike_penalty = -(self.config.queue_spike_weight * queue_spike)
         tail_queue_spike_penalty = -(self.config.tail_queue_spike_weight * tail_queue_spike)
         wasted_green_penalty = -(self.config.wasted_green_weight * inputs.wasted_green)

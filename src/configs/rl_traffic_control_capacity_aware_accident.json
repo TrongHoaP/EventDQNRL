@@ -31,6 +31,7 @@
   },
   "reward": {
     "name": "queue_wait_switch",
+    "use_effective_metrics": true,
     "queue_weight": 1.0,
     "wait_weight": 0.5,
     "throughput_weight": 0.8,

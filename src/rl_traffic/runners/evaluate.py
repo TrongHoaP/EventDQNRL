@@ -7,7 +7,13 @@ from src.rl_traffic.controllers import ControllerFactoryConfig, build_controller
 from src.rl_traffic.dqn import DQNAgent
 from src.rl_traffic.env import SumoTrafficSignalEnv
 from src.rl_traffic.metrics import append_episode_metrics, write_summary
-from src.rl_traffic.runners.common import add_common_args, load_runner_config, run_dir, run_episode
+from src.rl_traffic.runners.common import (
+    add_common_args,
+    experiment_metadata,
+    load_runner_config,
+    run_dir,
+    run_episode,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -29,6 +35,7 @@ def main() -> int:
     name = args.run_name or "evaluation"
     episodes = args.episodes or config.evaluation.episodes
     output = run_dir(name)
+    metadata = experiment_metadata(config)
     summaries = []
     probe_env = SumoTrafficSignalEnv(config)
     try:
@@ -58,7 +65,13 @@ def main() -> int:
             controller = build_controller(controller_name, factory_config)
         for episode in range(episodes):
             env = SumoTrafficSignalEnv(config, controller_name=controller.name)
-            metrics = run_episode(env, controller, episode=episode, seed=config.sumo.seed + episode)
+            metrics = run_episode(
+                env,
+                controller,
+                episode=episode,
+                seed=config.sumo.seed + episode,
+                metadata=metadata,
+            )
             append_episode_metrics(output / "metrics" / "episode_metrics.csv", metrics)
             summaries.append(metrics)
             env.close()

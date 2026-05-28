@@ -179,12 +179,13 @@ class SumoTrafficSignalEnv(gym.Env):
         assert self.controller is not None
         if self.config.state.mode == "approach_level":
             observation = self.controller.get_approach_state_vector()
-        if self.config.state.mode != "lane_level":
-            if self.config.state.mode == "approach_level":
-                return self._append_capacity_observation(observation)
+        elif self.config.state.mode == "lane_level":
+            observation = self.controller.get_state()
+        else:
             raise ValueError(f"Unsupported state mode: {self.config.state.mode}")
-        observation = self.controller.get_state()
-        return self._append_capacity_observation(observation)
+        observation = self._append_capacity_observation(observation)
+        observation = self._append_event_observation(observation)
+        return observation.astype(np.float32)
 
     def get_valid_action_mask(self) -> np.ndarray:
         if self.controller is None:
@@ -211,12 +212,45 @@ class SumoTrafficSignalEnv(gym.Env):
             [observation.astype(np.float32), np.asarray(features, dtype=np.float32)]
         )
 
+    def _append_event_observation(self, observation: np.ndarray) -> np.ndarray:
+        if not self.config.state.include_event_features:
+            return observation
+        return np.concatenate(
+            [observation.astype(np.float32), self._event_feature_vector()],
+            axis=0,
+        )
+
+    def _event_feature_vector(self) -> np.ndarray:
+        assert self.traci is not None
+        assert self.controller is not None
+        simulation_time = float(self.traci.simulation.getTime())
+        capacity_by_direction = self.capacity_tracker.capacity_by_direction(simulation_time)
+        directional_values = self._directional_values(capacity_by_direction)
+        action = self._current_action()
+        served_directions = self.capacity_tracker.served_directions(action)
+        wasted_green = compute_wasted_green(served_directions, capacity_by_direction)
+        event_active = 1.0 if any(capacity < 1.0 for capacity in capacity_by_direction.values()) else 0.0
+        return np.asarray(
+            [
+                event_active,
+                float(self.accidents.active_accident_count),
+                float(self.accidents.active_vehicle_count),
+                directional_values.event_direction_queue,
+                directional_values.event_direction_wait,
+                directional_values.non_event_direction_queue,
+                directional_values.non_event_direction_wait,
+                wasted_green,
+            ],
+            dtype=np.float32,
+        )
+
     def _directional_values(self, capacity_by_direction: dict[str, float]):
         assert self.controller is not None
         approach_metrics = self.controller.get_approach_metrics()
         queue_by_direction = {
             direction: _metric_float(metric, "queue_max", "queue", "queue_total")
-            for direction, metric in approach_metrics.items()
+            for direction in capacity_by_direction
+            if (metric := self._approach_metric_for_direction(direction, approach_metrics)) is not None
         }
         wait_by_direction = {
             direction: _metric_float(
@@ -226,11 +260,13 @@ class SumoTrafficSignalEnv(gym.Env):
                 "waiting_time",
                 "wait",
             )
-            for direction, metric in approach_metrics.items()
+            for direction in capacity_by_direction
+            if (metric := self._approach_metric_for_direction(direction, approach_metrics)) is not None
         }
         tail_queue_by_direction = {
             direction: _metric_float(metric, "queue_max", "queue", "queue_total")
-            for direction, metric in approach_metrics.items()
+            for direction in capacity_by_direction
+            if (metric := self._approach_metric_for_direction(direction, approach_metrics)) is not None
         }
         return compute_directional_values(
             queue_by_direction,
@@ -264,6 +300,18 @@ class SumoTrafficSignalEnv(gym.Env):
             if rule.direction == direction and rule.edge_id in approach_metrics:
                 return approach_metrics[rule.edge_id]
         return approach_metrics.get(direction)
+
+    def _current_action(self) -> int:
+        assert self.controller is not None
+        if (
+            self.controller.last_action is not None
+            and 0 <= self.controller.last_action < self.controller.action_size
+        ):
+            return int(self.controller.last_action)
+        for index, (traffic_light_id, phase_index) in enumerate(self.controller.action_map):
+            if self.controller.traci.trafficlight.getPhase(traffic_light_id) == phase_index:
+                return index
+        return 0
 
     def _info(
         self,

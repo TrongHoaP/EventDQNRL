@@ -6,7 +6,13 @@ import sys
 from src.rl_traffic.controllers import ControllerFactoryConfig, build_controller
 from src.rl_traffic.env import SumoTrafficSignalEnv
 from src.rl_traffic.metrics import append_episode_metrics
-from src.rl_traffic.runners.common import add_common_args, load_runner_config, run_dir, run_episode
+from src.rl_traffic.runners.common import (
+    add_common_args,
+    experiment_metadata,
+    load_runner_config,
+    run_dir,
+    run_episode,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -25,6 +31,7 @@ def main() -> int:
     args = parse_args()
     config = load_runner_config(args)
     name = args.run_name or args.controller
+    metadata = experiment_metadata(config)
     env = SumoTrafficSignalEnv(config, controller_name=args.controller)
     try:
         env.reset(seed=config.sumo.seed)
@@ -38,7 +45,13 @@ def main() -> int:
         controller = build_controller(args.controller, factory_config)
         for episode in range(args.episodes):
             env = SumoTrafficSignalEnv(config, controller_name=controller.name)
-            metrics = run_episode(env, controller, episode=episode, seed=config.sumo.seed + episode)
+            metrics = run_episode(
+                env,
+                controller,
+                episode=episode,
+                seed=config.sumo.seed + episode,
+                metadata=metadata,
+            )
             append_episode_metrics(run_dir(name) / "metrics" / "episode_metrics.csv", metrics)
             env.close()
             print(f"{controller.name} episode {episode}: reward={metrics.total_reward:.3f}, queue={metrics.mean_queue:.3f}")
@@ -49,4 +62,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

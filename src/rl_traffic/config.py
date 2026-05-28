@@ -47,11 +47,13 @@ class SafetyConfig:
 class StateConfig:
     mode: str = "lane_level"
     include_capacity: bool = False
+    include_event_features: bool = False
 
 
 @dataclass(frozen=True)
 class RewardConfig:
     name: str = "queue_wait_switch"
+    use_effective_metrics: bool = False
     queue_weight: float = 1.0
     wait_weight: float = 0.01
     throughput_weight: float = 0.0
@@ -80,6 +82,7 @@ class TrainingConfig:
     hidden_size: int = 128
     device: str = "auto"
     run_name: str = "dqn"
+    experiment_variant: str = ""
     eval_epsilon: float = 0.0
     checkpoint_window: int = 1
     validation_interval: int = 0

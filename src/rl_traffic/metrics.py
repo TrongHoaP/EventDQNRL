@@ -12,6 +12,10 @@ class EpisodeMetrics:
     controller_name: str
     episode: int
     seed: int
+    experiment_variant: str = ""
+    include_capacity: bool = False
+    include_event_features: bool = False
+    use_effective_metrics: bool = False
     effective_controller_name: str = ""
     safety_enabled: bool = False
     total_reward: float = 0.0
@@ -82,6 +86,14 @@ class EpisodeMetricAccumulator:
         self._speed_count = 0
         self._queue_values: list[float] = []
         self._tail_queue_values: list[float] = []
+
+    def set_metadata(self, metadata: dict[str, Any]) -> None:
+        self.metrics.experiment_variant = str(metadata.get("experiment_variant", ""))
+        self.metrics.include_capacity = bool(metadata.get("include_capacity", False))
+        self.metrics.include_event_features = bool(
+            metadata.get("include_event_features", False)
+        )
+        self.metrics.use_effective_metrics = bool(metadata.get("use_effective_metrics", False))
 
     def update(self, reward: float, info: dict[str, Any]) -> None:
         queue = float(info.get("total_queue", 0.0))
