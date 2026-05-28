@@ -228,22 +228,53 @@ class SumoTrafficSignalEnv(gym.Env):
         tail_queue = self._tail_queue()
         capacity_by_direction = self.capacity_tracker.capacity_by_direction(simulation_time)
         directional_values = self._directional_values(capacity_by_direction)
-        event_active = 1.0 if any(capacity < 1.0 for capacity in capacity_by_direction.values()) else 0.0
+        norms = self._event_feature_norms(capacity_by_direction)
+        event_active = 1.0 if self._event_is_active(capacity_by_direction) else 0.0
         return np.asarray(
             [
                 event_active,
-                float(self.accidents.active_accident_count),
-                float(self.accidents.active_vehicle_count),
-                directional_values.event_direction_queue,
-                directional_values.event_direction_wait,
-                directional_values.non_event_direction_queue,
-                directional_values.non_event_direction_wait,
-                float(total_queue),
-                float(total_wait),
-                float(tail_queue),
+                self._clip01(self.accidents.active_accident_count / norms["accident"]),
+                self._clip01(self.accidents.active_vehicle_count / norms["accident_vehicle"]),
+                self._clip01(directional_values.event_direction_queue / norms["queue"]),
+                self._clip01(directional_values.event_direction_wait / norms["wait"]),
+                self._clip01(directional_values.non_event_direction_queue / norms["queue"]),
+                self._clip01(directional_values.non_event_direction_wait / norms["wait"]),
+                self._clip01(float(total_queue) / norms["queue"]),
+                self._clip01(float(total_wait) / norms["wait"]),
+                self._clip01(float(tail_queue) / norms["tail_queue"]),
             ],
             dtype=np.float32,
         )
+
+    def _event_feature_norms(self, capacity_by_direction: dict[str, float]) -> dict[str, float]:
+        assert self.controller is not None
+        direction_count = max(len(capacity_by_direction), 1)
+        controlled_lane_count = self._controlled_lane_count()
+        accident_vehicle_count = sum(len(event.vehicles) for event in self.accidents.events)
+        return {
+            "queue": max(self.controller.max_queue_per_lane * direction_count, 1.0),
+            "wait": max(self.controller.max_wait_per_lane * controlled_lane_count, 1.0),
+            "tail_queue": max(self.controller.max_queue_per_lane, 1.0),
+            "accident": float(max(len(self.accidents.events), 1)),
+            "accident_vehicle": float(max(accident_vehicle_count, 1)),
+        }
+
+    def _controlled_lane_count(self) -> int:
+        assert self.controller is not None
+        lane_ids: set[str] = set()
+        for spec in self.controller.specs.values():
+            lane_ids.update(lane for lane in spec.controlled_lanes if not lane.startswith(":"))
+        return max(len(lane_ids), 1)
+
+    def _event_is_active(self, capacity_by_direction: dict[str, float]) -> bool:
+        return (
+            any(capacity < 1.0 for capacity in capacity_by_direction.values())
+            or self.accidents.active_accident_count > 0
+        )
+
+    @staticmethod
+    def _clip01(value: float) -> float:
+        return float(max(0.0, min(1.0, value)))
 
     def _directional_values(self, capacity_by_direction: dict[str, float]):
         assert self.controller is not None
@@ -385,7 +416,7 @@ class SumoTrafficSignalEnv(gym.Env):
         event_green_count = sum(
             1 for direction in served_directions if capacity_by_direction.get(direction, 1.0) <= 0.0
         )
-        event_active = any(capacity < 1.0 for capacity in capacity_by_direction.values())
+        event_active = self._event_is_active(capacity_by_direction)
         return {
             "controller_name": self.controller_name,
             "simulation_time": float(self.traci.simulation.getTime()),
