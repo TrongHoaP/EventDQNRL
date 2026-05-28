@@ -256,7 +256,6 @@ class TrafficLightController:
 
         traffic_light_id, target_green = self.action_map[action]
         if traffic_light_id in self.pending_green_after_yellow:
-            self.last_action = action
             return False
 
         current_phase = self.traci.trafficlight.getPhase(traffic_light_id)
