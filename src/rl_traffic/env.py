@@ -224,11 +224,10 @@ class SumoTrafficSignalEnv(gym.Env):
         assert self.traci is not None
         assert self.controller is not None
         simulation_time = float(self.traci.simulation.getTime())
+        total_queue, total_wait = self.controller._network_totals()
+        tail_queue = self._tail_queue()
         capacity_by_direction = self.capacity_tracker.capacity_by_direction(simulation_time)
         directional_values = self._directional_values(capacity_by_direction)
-        action = self._current_action()
-        served_directions = self.capacity_tracker.served_directions(action)
-        wasted_green = compute_wasted_green(served_directions, capacity_by_direction)
         event_active = 1.0 if any(capacity < 1.0 for capacity in capacity_by_direction.values()) else 0.0
         return np.asarray(
             [
@@ -239,7 +238,9 @@ class SumoTrafficSignalEnv(gym.Env):
                 directional_values.event_direction_wait,
                 directional_values.non_event_direction_queue,
                 directional_values.non_event_direction_wait,
-                wasted_green,
+                float(total_queue),
+                float(total_wait),
+                float(tail_queue),
             ],
             dtype=np.float32,
         )
