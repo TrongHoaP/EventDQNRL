@@ -59,7 +59,7 @@ def main() -> int:
         if not rows:
             continue
         row = rows[-1]
-        variant = row.get("experiment_variant") or _variant_from_run_name(run_dir.name)
+        variant = _variant_from_row(row, run_dir.name)
         for metric in args.metrics:
             value = _float_or_none(row.get(metric))
             if value is not None:
@@ -99,11 +99,27 @@ def _float_or_none(value: str | None) -> float | None:
 
 
 def _variant_from_run_name(run_name: str) -> str:
-    if run_name.startswith("event_dqn"):
-        return "event_dqn"
-    if run_name.startswith("dqn_no_event"):
+    name = run_name.lower()
+    if "dqn_no_event" in name:
         return "dqn_no_event"
+    if "event_dqn" in name:
+        return "event_dqn"
+    if "fixed_time" in name:
+        return "fixed_time"
+    if "actuated" in name:
+        return "actuated"
+    if "max_pressure" in name:
+        return "max_pressure"
+    if "random" in name:
+        return "random"
     return run_name
+
+
+def _variant_from_row(row: dict[str, str], run_name: str) -> str:
+    controller_name = (row.get("controller_name") or "").lower()
+    if controller_name and controller_name != "dqn":
+        return _variant_from_run_name(controller_name)
+    return row.get("experiment_variant") or _variant_from_run_name(run_name)
 
 
 if __name__ == "__main__":
