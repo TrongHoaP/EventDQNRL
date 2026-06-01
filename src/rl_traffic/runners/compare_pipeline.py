@@ -25,6 +25,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-baselines", action="store_true")
     parser.add_argument("--checkpoint-name", default="best.pt")
     parser.add_argument(
+        "--num-envs",
+        type=int,
+        default=1,
+        help="Number of parallel environments passed to DQN training only.",
+    )
+    parser.add_argument(
         "--resume",
         action="store_true",
         default=True,
@@ -58,6 +64,7 @@ def main() -> int:
                 episodes=args.train_episodes,
                 resume=args.resume,
                 checkpoint_name=args.checkpoint_name,
+                num_envs=args.num_envs,
             )
             _train_variant(
                 config=args.event_dqn_config,
@@ -66,6 +73,7 @@ def main() -> int:
                 episodes=args.train_episodes,
                 resume=args.resume,
                 checkpoint_name=args.checkpoint_name,
+                num_envs=args.num_envs,
             )
 
         if not args.skip_eval:
@@ -130,6 +138,7 @@ def _train_variant(
     episodes: int,
     resume: bool,
     checkpoint_name: str,
+    num_envs: int,
 ) -> None:
     if resume and _completed_run(run_name, episodes):
         checkpoint = Path("runs") / run_name / "checkpoints" / checkpoint_name
@@ -138,21 +147,22 @@ def _train_variant(
             return
     if resume:
         _archive_incomplete_run(run_name, episodes)
-    _run(
-        [
-            sys.executable,
-            "-m",
-            "src.rl_traffic.runners.train_dqn",
-            "--config",
-            config,
-            "--episodes",
-            str(episodes),
-            "--seed",
-            str(seed),
-            "--run-name",
-            run_name,
-        ]
-    )
+    command = [
+        sys.executable,
+        "-m",
+        "src.rl_traffic.runners.train_dqn",
+        "--config",
+        config,
+        "--episodes",
+        str(episodes),
+        "--seed",
+        str(seed),
+        "--run-name",
+        run_name,
+    ]
+    if num_envs > 1:
+        command.extend(["--num-envs", str(num_envs)])
+    _run(command)
 
 
 def _evaluate_variant(
