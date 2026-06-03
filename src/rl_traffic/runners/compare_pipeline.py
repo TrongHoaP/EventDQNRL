@@ -4,10 +4,33 @@ import argparse
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from pathlib import Path
 
 
 BASELINES = ("fixed_time", "actuated", "max_pressure", "random")
+
+
+@dataclass(frozen=True)
+class TrainingTask:
+    variant: str
+    config: str
+    run_name: str
+    seed: int
+
+
+@dataclass(frozen=True)
+class TrainingFailure:
+    seed: int
+    variant: str
+    error: Exception
+
+
+class SeedTrainingError(RuntimeError):
+    def __init__(self, failures: list[TrainingFailure]) -> None:
+        self.failures = failures
+        super().__init__(_format_training_failures(failures))
 
 
 def parse_args() -> argparse.Namespace:
@@ -27,8 +50,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--num-envs",
         type=int,
-        default=1,
+        default=5,
         help="Number of parallel environments passed to DQN training only.",
+    )
+    parser.add_argument(
+        "--seed-workers",
+        type=int,
+        default=5,
+        help="Maximum number of seeds trained in parallel.",
+    )
+    parser.add_argument(
+        "--variant-workers",
+        type=int,
+        default=2,
+        help="Maximum number of DQN variants trained in parallel per seed.",
     )
     parser.add_argument(
         "--resume",
@@ -42,6 +77,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     seeds = _parse_seeds(args.seeds)
+    _validate_parallel_args(args, seeds)
     run_group = args.run_group.strip("/\\")
     if not run_group:
         raise ValueError("--run-group must not be empty.")
@@ -52,29 +88,12 @@ def main() -> int:
     (run_root / "baselines").mkdir(parents=True, exist_ok=True)
     (run_root / "reports").mkdir(parents=True, exist_ok=True)
 
+    if not args.skip_train:
+        _run_parallel_training(args, seeds, run_group)
+
     for seed in seeds:
         dqn_train_name = f"{run_group}/train/dqn_no_event_seed{seed}"
         event_train_name = f"{run_group}/train/event_dqn_seed{seed}"
-
-        if not args.skip_train:
-            _train_variant(
-                config=args.dqn_config,
-                run_name=dqn_train_name,
-                seed=seed,
-                episodes=args.train_episodes,
-                resume=args.resume,
-                checkpoint_name=args.checkpoint_name,
-                num_envs=args.num_envs,
-            )
-            _train_variant(
-                config=args.event_dqn_config,
-                run_name=event_train_name,
-                seed=seed,
-                episodes=args.train_episodes,
-                resume=args.resume,
-                checkpoint_name=args.checkpoint_name,
-                num_envs=args.num_envs,
-            )
 
         if not args.skip_eval:
             _evaluate_variant(
@@ -129,6 +148,116 @@ def _parse_seeds(raw_seeds: list[str]) -> list[int]:
     if not seeds:
         raise ValueError("--seeds must contain at least one integer seed.")
     return seeds
+
+
+def _validate_parallel_args(args: argparse.Namespace, seeds: list[int]) -> None:
+    for name in ("num_envs", "seed_workers", "variant_workers"):
+        value = int(getattr(args, name))
+        if value < 1:
+            option = name.replace("_", "-")
+            raise ValueError(f"--{option} must be at least 1.")
+    duplicate_seeds = sorted({seed for seed in seeds if seeds.count(seed) > 1})
+    if duplicate_seeds:
+        raise ValueError(
+            "--seeds must not contain duplicates because parallel workers would "
+            f"write to the same run directories: {duplicate_seeds}"
+        )
+
+
+def _run_parallel_training(
+    args: argparse.Namespace,
+    seeds: list[int],
+    run_group: str,
+) -> None:
+    active_seed_workers = min(args.seed_workers, len(seeds))
+    active_variant_workers = min(args.variant_workers, 2)
+    max_sumo_instances = active_seed_workers * active_variant_workers * args.num_envs
+    print(
+        "parallel train config: "
+        f"seeds={len(seeds)}, seed_workers={args.seed_workers}, "
+        f"variant_workers={args.variant_workers}, num_envs={args.num_envs}, "
+        f"max_sumo_instances={max_sumo_instances}",
+        flush=True,
+    )
+    failures: list[TrainingFailure] = []
+    with ThreadPoolExecutor(
+        max_workers=active_seed_workers,
+        thread_name_prefix="seed-train",
+    ) as executor:
+        futures = {
+            executor.submit(_train_seed, args, run_group, seed): seed
+            for seed in seeds
+        }
+        for future in as_completed(futures):
+            seed = futures[future]
+            try:
+                future.result()
+            except SeedTrainingError as error:
+                failures.extend(error.failures)
+            except Exception as error:
+                failures.append(
+                    TrainingFailure(seed=seed, variant="seed_worker", error=error)
+                )
+    if failures:
+        raise RuntimeError(_format_training_failures(failures))
+
+
+def _train_seed(args: argparse.Namespace, run_group: str, seed: int) -> None:
+    tasks = (
+        TrainingTask(
+            variant="dqn_no_event",
+            config=args.dqn_config,
+            run_name=f"{run_group}/train/dqn_no_event_seed{seed}",
+            seed=seed,
+        ),
+        TrainingTask(
+            variant="event_dqn",
+            config=args.event_dqn_config,
+            run_name=f"{run_group}/train/event_dqn_seed{seed}",
+            seed=seed,
+        ),
+    )
+    failures: list[TrainingFailure] = []
+    worker_count = min(args.variant_workers, len(tasks))
+    with ThreadPoolExecutor(
+        max_workers=worker_count,
+        thread_name_prefix=f"seed-{seed}-variant",
+    ) as executor:
+        futures = {
+            executor.submit(_train_task, task, args): task
+            for task in tasks
+        }
+        for future in as_completed(futures):
+            task = futures[future]
+            try:
+                future.result()
+            except Exception as error:
+                failures.append(
+                    TrainingFailure(seed=task.seed, variant=task.variant, error=error)
+                )
+    if failures:
+        raise SeedTrainingError(failures)
+
+
+def _train_task(task: TrainingTask, args: argparse.Namespace) -> None:
+    _train_variant(
+        config=task.config,
+        run_name=task.run_name,
+        seed=task.seed,
+        episodes=args.train_episodes,
+        resume=args.resume,
+        checkpoint_name=args.checkpoint_name,
+        num_envs=args.num_envs,
+    )
+
+
+def _format_training_failures(failures: list[TrainingFailure]) -> str:
+    details = "; ".join(
+        f"seed={failure.seed} variant={failure.variant}: "
+        f"{type(failure.error).__name__}: {failure.error}"
+        for failure in sorted(failures, key=lambda item: (item.seed, item.variant))
+    )
+    return f"Parallel training failed for {len(failures)} task(s): {details}"
 
 
 def _train_variant(

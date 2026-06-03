@@ -5,6 +5,7 @@ from collections import defaultdict
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from src.rl_traffic.config import SumoConfig, repo_path
 from src.sumo.sumo_simulation import (
@@ -203,12 +204,14 @@ class SumoSession:
         self.config = config
         self.traci = traci
         self._started = False
+        self._output_prefix = ""
 
     def start(self, seed: int | None = None) -> Any:
         if sumolib is None or traci is None:
             raise RuntimeError("sumolib and traci are required to run SUMO.")
         if self._started:
             self.close()
+        self._output_prefix = f".sumo_rl_{uuid4().hex}_"
         sumo_seed = self.config.seed if seed is None else seed
         sumo_binary = sumolib.checkBinary("sumo-gui" if self.config.gui else "sumo")
         command = [
@@ -229,18 +232,35 @@ class SumoSession:
             "-1",
             "--xml-validation",
             "never",
+            "--output-prefix",
+            self._output_prefix,
         ]
-        traci.start(command)
+        try:
+            traci.start(command)
+        except Exception:
+            self._cleanup_output_files()
+            raise
         self._started = True
         return traci
 
     def close(self) -> None:
         if not self._started or traci is None:
+            self._cleanup_output_files()
             return
         try:
             traci.close()
         finally:
             self._started = False
+            self._cleanup_output_files()
+
+    def _cleanup_output_files(self) -> None:
+        if not self._output_prefix:
+            return
+        output_root = repo_path(self.config.sumocfg).parent
+        for path in output_root.rglob(f"{self._output_prefix}*"):
+            if path.is_file():
+                path.unlink(missing_ok=True)
+        self._output_prefix = ""
 
 
 def output_dir(run_name: str) -> Path:
