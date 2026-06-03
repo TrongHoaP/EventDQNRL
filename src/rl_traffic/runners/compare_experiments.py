@@ -108,6 +108,8 @@ def _load_eval_rows(runs_dir: Path) -> list[dict[str, str]]:
             continue
         run_dir = metrics_path.parent.parent
         run_name = run_dir.name
+        if "_incomplete_" in run_name:
+            continue
         with metrics_path.open("r", encoding="utf-8", newline="") as file:
             for row in csv.DictReader(file):
                 normalized = _normalize_row(row, run_name)

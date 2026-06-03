@@ -113,7 +113,14 @@ class DQNAgent:
             )
         )
         if len(self.replay) >= max(self.config.min_replay_size, self.config.batch_size):
-            self.optimize()
+            try:
+                self.optimize()
+            except Exception as error:
+                if not self._is_cuda_oom(error) or self.device.type != "cuda":
+                    raise
+                print("CUDA OOM during DQN optimize; switching agent to CPU.", flush=True)
+                self._move_to_cpu()
+                self.optimize()
         if self.steps % self.config.target_update_steps == 0:
             self.target.load_state_dict(self.policy.state_dict())
 
@@ -217,6 +224,26 @@ class DQNAgent:
         if device == "auto":
             return torch.device("cuda" if torch.cuda.is_available() else "cpu")
         return torch.device(device)
+
+    def _move_to_cpu(self) -> None:
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        self.device = torch.device("cpu")
+        self.policy.to(self.device)
+        self.target.to(self.device)
+        self.optimizer = optim.Adam(self.policy.parameters(), lr=self.config.learning_rate)
+
+    @staticmethod
+    def _is_cuda_oom(error: Exception) -> bool:
+        message = str(error).lower()
+        return (
+            "cuda" in message
+            and (
+                "out of memory" in message
+                or "cudaerrormemoryallocation" in message
+                or "memory allocation" in message
+            )
+        )
 
     def _valid_actions(self, info: dict[str, Any]) -> list[int]:
         mask = info.get("valid_action_mask")
